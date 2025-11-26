@@ -45,36 +45,24 @@ router.post("/logout", async (req, res) => {
 });
 
 // 3. RUTA PROTEGIDA (ejemplo)
-router.get("/perfil", authenticateToken, (req, res) => {
-  // 1. Acceso Seguro al Rol usando Encadenamiento Opcional (?.):
-  // El payload de Supabase NO tiene 'role' en el nivel raíz.
-  // Buscamos 'user_role' (o 'role') dentro de app_metadata de forma segura.
-  const userRole = req.user.app_metadata?.user_role || "default_user";
+router.get('/perfil', authenticateToken, (req, res) => {
+    // ACCESO CORREGIDO AL ROL: Usamos req.user.role, que Supabase garantiza que existe.
+    const userRole = req.user.role || 'default_user';
+    
+    // Accedemos a las propiedades necesarias
+    const userId = req.user.sub || req.user.id; 
+    const userEmail = req.user.email; 
 
-  // 2. Acceso Seguro a Propiedades Raíz:
-  // Aseguramos que 'sub' (ID) y 'email' existen antes de usarlos.
-  const userId = req.user?.sub;
-  const userEmail = req.user?.email;
-
-  // Si tu código tenía esta estructura original, el error estaba en la línea 53:
-  /*
-    const userRole = req.user.app_metadata 
-                     ? (req.user.app_metadata.role || 'default_user') 
-                     : 'default_user'; // Ocurre el error si 'app_metadata' es undefined
-    */
-
-  // --- Respuesta Final (Línea 53 corregida) ---
-  res.json({
-    message: "¡Acceso Concedido a la información privada!",
-    userData: {
-      id: userId,
-      email: userEmail,
-      role: userRole,
-      // Si el error de 'role' persiste, temporalmente usa fullPayload
-    },
-    // Temporalmente, incluye el payload completo para que veas la estructura real
-    // fullPayload: req.user
-  });
+    res.json({
+        message: '¡Acceso Concedido a la información privada!',
+        userData: {
+            id: userId,
+            email: userEmail,
+            role: userRole, // Ahora esto debe ser 'authenticated'
+        },
+        // Opcional: Esto ya no debería ser necesario, pero ayuda a confirmar.
+        // fullPayload: req.user 
+    });
 });
 
 module.exports = router;
