@@ -3,7 +3,7 @@
 const express = require("express");
 const router = express.Router();
 const authService = require("../services/authService");
-const { authenticateToken } = require("../middleware/authMiddleware");
+const { authenticateToken, hasRole } = require("../middleware/authMiddleware");
 
 // 1. RUTA DE INTERCAMBIO DE TOKEN (CRÍTICA)
 // El frontend nos enviará el JWT que Supabase le dio.
@@ -62,6 +62,14 @@ router.get('/perfil', authenticateToken, (req, res) => {
         },
         // Opcional: Esto ya no debería ser necesario, pero ayuda a confirmar.
         // fullPayload: req.user 
+    });
+});
+
+// 4. RUTA PROTEGIDA POR ROL (Solo para 'admin')
+router.get('/admin-data', authenticateToken, hasRole('admin'), (req, res) => {
+    res.json({
+        message: '¡Acceso Concedido! Eres un administrador.',
+        secretData: 'Datos confidenciales del administrador.'
     });
 });
 
