@@ -33,6 +33,30 @@ async function authenticateToken(req, res, next) {
     }
 }
 
+// Middleware para verificar si el usuario (que ya ha sido autenticado) tiene el rol requerido.
+const hasRole = (requiredRole) => {
+    return (req, res, next) => {
+        // El payload del JWT de Supabase ya está en req.user
+        const userRole = req.user?.role; // Accede al rol que está en la raíz del payload
+
+        if (!userRole) {
+            // El JWT es válido, pero no tiene rol (no debería pasar con Supabase)
+            return res.status(403).json({ message: 'Acceso denegado: Rol no encontrado.' });
+        }
+
+        if (userRole !== requiredRole) {
+            // El rol del usuario no coincide con el rol requerido por la ruta
+            return res.status(403).json({ 
+                message: `Acceso denegado: Se requiere el rol '${requiredRole}'. Tu rol es '${userRole}'.` 
+            });
+        }
+
+        // Si el rol coincide, pasa al siguiente middleware o a la función de la ruta
+        next();
+    };
+};
+
 module.exports = {
-    authenticateToken
+    authenticateToken,
+    hasRole,
 };

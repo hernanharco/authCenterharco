@@ -46,8 +46,8 @@ async function verifySupabaseToken(token) {
  * @param {object} res - Objeto de respuesta de Express.
  * @param {string} token - El JWT a establecer.
  */
-function setAuthCookie(res, token) {
-    res.cookie('authToken', token, {
+function setAuthCookie(res, token, name='authToken') {
+    res.cookie(name, token, {
         httpOnly: true,
         // En producción, debe ser 'true'. Aquí lo ajustamos según el entorno si es necesario.
         secure: process.env.NODE_ENV === 'production', 
@@ -68,9 +68,34 @@ function clearAuthCookie(res) {
     });
 }
 
+/**
+ * Utiliza el refresh token almacenado en la cookie para obtener un nuevo par (access_token, refresh_token).
+ * @param {string} refreshToken - El token de refresco del usuario.
+ * @returns {object} El objeto de sesión renovado.
+ */
+async function refreshAuthToken(refreshToken) {
+    if (!refreshToken) {
+        throw new Error("No se proporcionó el Refresh Token.");
+    }
+    
+    // Llamada directa a Supabase para renovar la sesión
+    const { data, error } = await supabase.auth.setSession({ refresh_token: refreshToken });
+
+    if (error) {
+        throw error;
+    }
+
+    if (!data.session) {
+        throw new Error("Respuesta de sesión vacía de Supabase.");
+    }
+
+    return data.session;
+}
+
 module.exports = {
     verifySupabaseToken,
     setAuthCookie,
     clearAuthCookie,
+    refreshAuthToken,
     supabase // Exportamos el cliente Supabase para otras interacciones si es necesario
 };
