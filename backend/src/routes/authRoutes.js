@@ -9,20 +9,21 @@ const { authenticateToken, hasRole } = require("../middleware/authMiddleware");
 // El frontend nos enviará el JWT que Supabase le dio.
 // Nosotros lo establecemos como una HttpOnly Cookie.
 router.post("/set-cookie", async (req, res) => {
-  const { token } = req.body;
+  const { access_token, refresh_token } = req.body; //<-- Recibe ambos tokens
 
-  if (!token) {
+  if (!access_token || !refresh_token) {
     return res
       .status(400)
-      .json({ message: "Token requerido para establecer la cookie." });
+      .json({ message: "Tokens Requeridos authRoutes.js" });
   }
 
   try {
     // Opcional pero recomendado: verificar el token antes de establecerlo
     await authService.verifySupabaseToken(token);
 
-    // Establecer la HttpOnly Cookie
-    authService.setAuthCookie(res, token);
+    // Establecer HttpOnly Cookies (¡Ambas!)
+    authService.setAuthCookie(res, access_token, 'authToken');
+    authService.setAuthCookie(res, refresh_token, 'refreshToken'); // <-- Guardar el refresh token
 
     res.json({ message: "Cookie de sesión establecida correctamente authRoutes.js." });
   } catch (error) {
@@ -71,6 +72,37 @@ router.get('/admin-data', authenticateToken, hasRole('admin'), (req, res) => {
         message: '¡Acceso Concedido! Eres un administrador.',
         secretData: 'Datos confidenciales del administrador.'
     });
+});
+
+// 5. RUTA DE RENOVACIÓN DE SESIÓN
+// Usa el refresh token para obtener un nuevo JWT sin que el usuario inicie sesión de nuevo.
+router.post('/refresh-session', async (req, res) => {
+    // 1. Obtener el Refresh Token de la cookie
+    const refreshToken = req.cookies.refreshToken; 
+    
+    if (!refreshToken) {
+        // Si no hay refresh token, la sesión ha expirado completamente
+        return res.status(401).json({ message: 'No se encontró el token de refresco. Por favor, inicie sesión.' });
+    }
+
+    try {
+        // 2. Renovar la sesión con Supabase
+        const newSession = await authService.refreshAuthToken(refreshToken);
+        
+        // 3. Establecer las nuevas HttpOnly Cookies (JWT y Refresh Token)
+        authService.setAuthCookie(res, newSession.access_token, 'authToken');
+        authService.setAuthCookie(res, newSession.refresh_token, 'refreshToken'); // ¡Importante!
+
+        res.json({ message: "Sesión renovada exitosamente." });
+    } catch (error) {
+        console.error('Error al renovar el token:', error.message);
+        
+        // 4. Limpiar cookies si la renovación falla (refresh token expirado o inválido)
+        authService.clearAuthCookie(res, 'authToken');
+        authService.clearAuthCookie(res, 'refreshToken');
+        
+        return res.status(401).json({ message: 'Sesión expirada. Vuelva a iniciar sesión.' });
+    }
 });
 
 module.exports = router;
