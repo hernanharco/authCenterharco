@@ -1,10 +1,11 @@
 // frontend/src/components/AuthForm.js
-"use client"
+
+"use client"; // CRÍTICO: Necesario para usar hooks de React (useState, useRouter)
 
 import React, { useState } from 'react';
-import { supabase } from '../utils/supabase';
-import { fetchApi } from '../utils/api';
-import { useRouter } from 'next/navigation'; // Usamos next/navigation para App Router
+import { supabase } from '../utils/supabase'; // Ajusta la ruta si es necesario
+import { fetchApi } from '../utils/api';     // Ajusta la ruta si es necesario
+import { useRouter } from 'next/navigation';
 
 export default function AuthForm() {
     const [email, setEmail] = useState('');
@@ -13,9 +14,9 @@ export default function AuthForm() {
     const [isLogin, setIsLogin] = useState(true);
     const router = useRouter();
 
-    // Este componente DEBE ser 'use client' si estás usando App Router (que es el default moderno)
-    // Agrega 'use client' al principio del archivo si da error.
-    
+    // ----------------------------------------------------
+    // Lógica para Login/Registro por Email/Contraseña
+    // ----------------------------------------------------
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError(null);
@@ -23,8 +24,10 @@ export default function AuthForm() {
         try {
             let authResponse;
             if (isLogin) {
+                // 1. Login con Supabase
                 authResponse = await supabase.auth.signInWithPassword({ email, password });
             } else {
+                // 1. Registro con Supabase
                 authResponse = await supabase.auth.signUp({ email, password });
             }
 
@@ -32,36 +35,71 @@ export default function AuthForm() {
                 throw authResponse.error;
             }
 
+            // 2. Extraer el JWT (access_token)
             const token = authResponse.data.session?.access_token;
             
             if (token) {
-                // 1. Intercambio de Token con Express (establece la HttpOnly Cookie)
+                // 3. ¡CRÍTICO!: Intercambio de Token con Express
                 await fetchApi('/auth/set-cookie', {
                     method: 'POST',
                     body: { token }
                 });
                 
-                // 2. Redirigir al dashboard
+                // 4. Redirigir al dashboard
                 router.push('/dashboard');
             }
 
         } catch (err) {
             console.error(err);
-            setError(err.message || 'Error en la autenticación. Revisa email/contraseña.');
+            setError(err.message || 'Error en la autenticación. Revisa credenciales.');
+        }
+    };
+    
+    // ----------------------------------------------------
+    // FUNCIÓN NUEVA: LOGIN CON GOOGLE (OAuth)
+    // ----------------------------------------------------
+    const handleGoogleLogin = async () => {
+        setError(null);
+        try {
+            // Inicia el flujo de OAuth, redirigiendo al usuario a Google
+            const { error } = await supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: {
+                    // La URL a donde Supabase redirigirá al usuario DESPUÉS de Google
+                    // Luego, el JWT será manejado por la página de callback.
+                    redirectTo: `${window.location.origin}/auth/callback`, 
+                },
+            });
+
+            if (error) throw error;
+            
+            // Nota: No se redirige aquí, la función signInWithOAuth lo hace automáticamente.
+
+        } catch (err) {
+            setError(err.message || 'Error al iniciar sesión con Google.');
         }
     };
 
     return (
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             <h2>{isLogin ? '🔑 Iniciar Sesión' : '📝 Crear Cuenta'}</h2>
             {error && <p style={{ color: 'red' }}>{error}</p>}
             
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required />
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Contraseña" required />
             
-            <button type="submit">{isLogin ? 'Entrar' : 'Registrar'}</button>
+            <button type="submit" disabled={!email || !password}>
+                {isLogin ? 'Entrar' : 'Registrar'}
+            </button>
             
-            <p onClick={() => setIsLogin(!isLogin)} style={{ cursor: 'pointer' }}>
+            <p style={{ textAlign: 'center' }}>— O —</p>
+            
+            {/* NUEVO BOTÓN PARA GOOGLE */}
+            <button type="button" onClick={handleGoogleLogin} style={{ backgroundColor: '#DB4437', color: 'white', border: 'none', padding: '10px', cursor: 'pointer' }}>
+                Iniciar Sesión con Google 🚀
+            </button>
+            
+            <p onClick={() => setIsLogin(!isLogin)} style={{ cursor: 'pointer', textAlign: 'center', fontSize: 'small' }}>
                 {isLogin ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Inicia Sesión'}
             </p>
         </form>
