@@ -1,41 +1,36 @@
-// ./server.js
-
-require('dotenv').config(); 
+// Este es un ejemplo. Si tu archivo principal se llama app.js, úsalo.
+//backend/server.js
+require('dotenv').config();
 const express = require('express');
-const bodyParser = require('body-parser');
-const cookieParser = require('cookie-parser');
+const cors = require('cors');
+const cookieParser = require('cookie-parser'); // NECESARIO
 const authRoutes = require('./src/routes/authRoutes');
 
 const app = express();
-const port = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
+const FRONTEND_URL = process.env.NEXT_PUBLIC_FRONTEND_URL; // Usar la URL del frontend (e.g., http://localhost:3001)
 
-// Configuración de Middlewares
-app.use(bodyParser.json());
+// --- CRÍTICO: CONFIGURACIÓN CORS PARA PERMITIR COOKIES ---
+app.use(cors({
+    origin: FRONTEND_URL, // Permite el origen de tu frontend
+    credentials: true, // ¡ESTO ES CRÍTICO! Permite el intercambio de HttpOnly Cookies
+}));
+
+// Middleware para parsear el body de las peticiones JSON
+app.use(express.json());
+
+// --- CRÍTICO: HABILITAR EL PARSEO DE COOKIES ---
 app.use(cookieParser());
 
-// Configuración de CORS (CRÍTICO para peticiones entre frontend y backend)
-// En desarrollo, permitimos al frontend acceder. AJUSTA ESTO A TU DOMINIO REAL EN PROD.
-app.use((req, res, next) => {
-    // URL de tu frontend Next.js
-    res.header('Access-Control-Allow-Origin', 'http://localhost:3001'); 
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.header('Access-Control-Allow-Methods', 'GET, POST');
-    next();
-});
-
-
-// Montar Rutas
+// Rutas de autenticación
 app.use('/auth', authRoutes);
-app.use('/api', authRoutes); // También montamos el perfil en /api
 
 // Ruta de prueba
 app.get('/', (req, res) => {
-    res.send('Servidor Express de Autenticación funcionando.');
+    res.send('Servidor de autenticación Express OK.');
 });
 
-// Iniciar el Servidor
-app.listen(port, () => {
-    console.log(`Backend de Auth escuchando en http://localhost:${port}`);
-    console.log(`¡Recuerda iniciar el Frontend en http://localhost:3001!`);
+app.listen(PORT, () => {
+    console.log(`Express server running on port ${PORT}`);
+    console.log(`CORS habilitado para: ${FRONTEND_URL}`);
 });

@@ -1,62 +1,59 @@
-// ./src/middleware/authMiddleware.js
+///backend/src/middleware/authMiddleware.js
 
 const authService = require('../services/authService');
 
-/**
- * Middleware para proteger rutas.
- * 1. Extrae el JWT de la HttpOnly Cookie.
- * 2. Verifica la validez del token usando authService.
- * 3. Adjunta los datos del usuario a req.user si es válido.
- */
-async function authenticateToken(req, res, next) {
-    // 1. Obtener el token de las cookies
-    const token = req.cookies.authToken; 
+const authenticateToken = async (req, res, next) => {
+    const authToken = req.cookies.authToken; 
 
-    if (!token) {
-        return res.status(401).json({ message: 'Acceso denegado. No se proporcionó token de sesión authMiddleware.js.' });
+    if (!authToken) {
+        return res.status(401).json({ message: 'No autenticado. Cookie de sesión faltante.' });
     }
 
     try {
-        // 2. Verificar el token usando el servicio
-        const userData = await authService.verifySupabaseToken(token);
-
-        // 3. Adjuntar datos del usuario (el payload decodificado)
-        req.user = userData;
+        // 1. Verificar el JWT (obtiene el payload)
+        const userPayload = await authService.verifySupabaseToken(authToken); 
         
-        // Continuar con la ruta
-        next(); 
-    } catch (error) {
-        // Token inválido o expirado
-        console.error('Error de verificación de token:', error.message);
-        authService.clearAuthCookie(res); // Limpia la cookie por seguridad si falla
-        return res.status(403).json({ message: 'Sesión expirada o token inválido. Por favor, inicie sesión de nuevo.' });
-    }
-}
+        // El ID del usuario en Supabase JWT es 'sub'
+        const userId = userPayload.sub; 
 
-// Middleware para verificar si el usuario (que ya ha sido autenticado) tiene el rol requerido.
-const hasRole = (requiredRole) => {
-    return (req, res, next) => {
-        // El payload del JWT de Supabase ya está en req.user
-        const userRole = req.user?.role; // Accede al rol que está en la raíz del payload
-
-        if (!userRole) {
-            // El JWT es válido, pero no tiene rol (no debería pasar con Supabase)
-            return res.status(403).json({ message: 'Acceso denegado: Rol no encontrado.' });
-        }
-
-        if (userRole !== requiredRole) {
-            // El rol del usuario no coincide con el rol requerido por la ruta
-            return res.status(403).json({ 
-                message: `Acceso denegado: Se requiere el rol '${requiredRole}'. Tu rol es '${userRole}'.` 
-            });
-        }
-
-        // Si el rol coincide, pasa al siguiente middleware o a la función de la ruta
+        // 2. CRÍTICO: Buscar el rol en la base de datos (Opción 1)
+        const userRole = await authService.getUserRole(userId); 
+        
+        // 3. Adjuntar el payload COMPLETO con el rol VERDADERO a req.user
+        req.user = {
+            id: userId,
+            email: userPayload.email,
+            role: userRole, // ¡ESTE es el rol que usará hasRole!
+            // ... otros datos del payload si los necesitas
+        };
+        
         next();
-    };
+
+    } catch (error) {
+        console.error("Fallo de verificación/Rol:", error.message);
+        
+        // Si el JWT es inválido/expirado, devolvemos 401 para que el frontend intente renovar
+        return res.status(401).json({ message: 'Token de sesión inválido o expirado.' });
+    }
 };
 
-module.exports = {
-    authenticateToken,
-    hasRole,
+const hasRole = (requiredRole) => (req, res, next) => {
+    // Esta función ahora solo necesita leer req.user.role
+    const userRole = req.user?.role;
+    
+    if (!userRole) {
+        // Esto solo pasaría si authenticateToken no se ejecutó, lo cual no debería ocurrir aquí
+        return res.status(403).json({ message: 'Acceso denegado. Rol de usuario no encontrado.' });
+    }
+
+    if (userRole === requiredRole) {
+        return next();
+    }
+    
+    // Si el rol no coincide
+    return res.status(403).json({ 
+        message: `Acceso denegado. Se requiere el rol '${requiredRole}'. Tu rol es '${userRole}'.` 
+    });
 };
+
+module.exports = { authenticateToken, hasRole };
