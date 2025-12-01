@@ -14,7 +14,7 @@ export default function Dashboard() {
         const fetchProfile = async () => {
             try {
                 // 1. Llamada a Express: Envía la HttpOnly Cookie y verifica el JWT.
-                const data = await fetchApi('/api/perfil');
+                const data = await fetchApi('/auth/perfil');
                 setProfileData(data.userData);
             } catch (error) {
                 console.error('Error al obtener perfil:', error.message);
