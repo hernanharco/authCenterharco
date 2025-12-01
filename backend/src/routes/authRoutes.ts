@@ -4,6 +4,7 @@ import { authenticateToken, hasRole } from "../middleware/authMiddleware";
 
 const router = Router();
 
+// Tipo opcional para el payload del usuario autenticado
 interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
@@ -14,6 +15,8 @@ interface AuthenticatedRequest extends Request {
 }
 
 // --- RUTAS ---
+
+// 1. RUTA DE INTERCAMBIO DE TOKEN (establecer cookies de sesión)
 router.post("/set-cookie", async (req: Request, res: Response) => {
   const { access_token, refresh_token } = req.body;
 
@@ -22,7 +25,10 @@ router.post("/set-cookie", async (req: Request, res: Response) => {
   }
 
   try {
+    // Verifica que el token de Supabase sea válido
     await authService.verifySupabaseToken(access_token);
+
+    // Establece cookies de sesión para el access_token y refresh_token
     authService.setAuthCookie(res, access_token, "authToken");
     authService.setAuthCookie(res, refresh_token, "refreshToken");
 
@@ -33,18 +39,21 @@ router.post("/set-cookie", async (req: Request, res: Response) => {
   }
 });
 
+// 2. RUTA DE LOGOUT (limpia cookies de sesión)
 router.post("/logout", (req: Request, res: Response) => {
   authService.clearAuthCookie(res);
   res.json({ message: "Sesión cerrada exitosamente." });
 });
 
+// 3. RUTA PROTEGIDA: Perfil de usuario
 router.get("/perfil", authenticateToken, (req: AuthenticatedRequest, res: Response) => {
   res.json({
     message: "Acceso concedido",
-    userData: req.user,
+    userData: req.user, // Devuelve los datos del usuario autenticado
   });
 });
 
+// 4. RUTA PROTEGIDA POR ROL (solo administradores)
 router.get("/admin-data", authenticateToken, hasRole("admin"), (req: Request, res: Response) => {
   res.json({
     message: "Eres administrador",
@@ -52,13 +61,17 @@ router.get("/admin-data", authenticateToken, hasRole("admin"), (req: Request, re
   });
 });
 
+// 5. RUTA DE RENOVACIÓN DE SESIÓN (refresh token)
 router.post("/refresh-session", async (req: Request, res: Response) => {
   const refreshToken = req.cookies?.refreshToken;
   if (!refreshToken)
     return res.status(401).json({ message: "Token de refresco faltante." });
 
   try {
+    // Renovar tokens usando el refresh token
     const newSession = await authService.refreshAuthToken(refreshToken);
+
+    // Actualiza cookies con los nuevos tokens
     authService.setAuthCookie(res, newSession.access_token, "authToken");
     authService.setAuthCookie(res, newSession.refresh_token, "refreshToken");
 
@@ -70,6 +83,7 @@ router.post("/refresh-session", async (req: Request, res: Response) => {
   }
 });
 
+// 6. RUTA INTERNA PARA VALIDACIÓN DE TOKEN (para otros microservicios)
 router.post(
   "/internal/validate-token",
   authenticateToken,

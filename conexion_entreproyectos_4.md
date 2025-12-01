@@ -18,3 +18,7 @@ router.post('/internal/validate-token', authenticateToken, (req, res) => {
     });
 });
 ```
+promt
+```
+
+# Pasar al proyecto de Portfolio en la parte del backend esta la continuidad
