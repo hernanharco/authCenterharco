@@ -68,7 +68,7 @@ export function setAuthCookie(
   res.cookie(name, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: "lax",
     maxAge,
   });
 }
@@ -80,7 +80,7 @@ export function clearAuthCookie(res: Response) {
   const expiredOptions = {
     httpOnly: true,
     expires: new Date(0),
-    sameSite: "strict" as const,
+    sameSite: "lax" as const,
   };
 
   res.cookie("authToken", "", expiredOptions);
