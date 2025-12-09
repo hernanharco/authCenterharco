@@ -1,3 +1,5 @@
+//backend/src/routes/authRoutes.ts
+
 import { Router, Request, Response } from "express";
 import * as authService from "../services/authService";
 import { authenticateToken, hasRole } from "../middleware/authMiddleware";

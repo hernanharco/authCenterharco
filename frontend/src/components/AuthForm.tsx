@@ -3,33 +3,33 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { supabase } from "../utils/supabase"; 
-import { fetchApi } from "../utils/api"; 
+import { supabase } from "../utils/supabase";
+import { fetchApi } from "../utils/api";
 import { useRouter } from "next/navigation";
-import { useTrackingReader } from "../utils/useTrackingReader"; 
+import { useTrackingReader } from "../utils/useTrackingReader";
 
 // ===============================================
 // INTERFACES
 // ===============================================
 
 interface SupabaseError {
-    message: string;
+  message: string;
 }
 
 interface AuthSessionResponse {
-    error: SupabaseError | null;
-    data: {
-        session: {
-            access_token: string;
-            refresh_token: string;
-        } | null;
-    };
+  error: SupabaseError | null;
+  data: {
+    session: {
+      access_token: string;
+      refresh_token: string;
+    } | null;
+  };
 }
 
 interface TrackingData {
-    sourceApp: string;
-    timestamp: string;
-    status: string;
+  sourceApp: string;
+  timestamp: string;
+  status: string;
 }
 
 // ===============================================
@@ -60,11 +60,17 @@ const AuthForm: React.FC = () => {
 
     try {
       let authResponse: AuthSessionResponse;
-      
+
       if (isLogin) {
-        authResponse = await supabase.auth.signInWithPassword({ email, password }) as AuthSessionResponse;
+        authResponse = (await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })) as AuthSessionResponse;
       } else {
-        authResponse = await supabase.auth.signUp({ email, password }) as AuthSessionResponse;
+        authResponse = (await supabase.auth.signUp({
+          email,
+          password,
+        })) as AuthSessionResponse;
       }
 
       if (authResponse.error) {
@@ -87,6 +93,9 @@ const AuthForm: React.FC = () => {
         // 🚨 LÓGICA DE CIERRE DE VENTANA / REDIRECCIÓN (para Email/Password)
         console.log("estoy en la parte if tranckingInfo: ", trackingInfo);
         if (trackingInfo) {
+          if (window.opener) {
+            window.opener.postMessage({ type: "auth:refresh" }, "*");
+          }
           window.close();
         } else {
           router.push("/dashboard");
@@ -95,7 +104,7 @@ const AuthForm: React.FC = () => {
     } catch (err) {
       console.error(err);
       let errorMessage = "Error en la autenticación. Revisa credenciales.";
-      if (typeof err === 'object' && err !== null && 'message' in err) {
+      if (typeof err === "object" && err !== null && "message" in err) {
         errorMessage = (err as SupabaseError).message;
       }
       setError(errorMessage);
@@ -116,11 +125,11 @@ const AuthForm: React.FC = () => {
         // Debemos recodificar la data para pasarla a la URL de redirección
         const jsonString: string = JSON.stringify(trackingInfo);
         const encodedData: string = encodeURIComponent(jsonString);
-        
+
         // Adjuntamos el parámetro 'tracking' al redirectTo
         redirectToUrl = `${redirectToUrl}?tracking=${encodedData}`;
       }
-      
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -132,7 +141,7 @@ const AuthForm: React.FC = () => {
     } catch (err) {
       console.error(err);
       let errorMessage = "Error al iniciar sesión con Google.";
-      if (typeof err === 'object' && err !== null && 'message' in err) {
+      if (typeof err === "object" && err !== null && "message" in err) {
         errorMessage = (err as SupabaseError).message;
       }
       setError(errorMessage);
@@ -149,22 +158,34 @@ const AuthForm: React.FC = () => {
       {error && <p style={{ color: "red" }}>{error}</p>}
 
       {trackingInfo && (
-        <p style={{ color: "green", fontSize: "small", textAlign: "center", border: "1px solid #ccc", padding: "5px" }}>
-            Redirigido desde: **{trackingInfo.sourceApp}**
+        <p
+          style={{
+            color: "green",
+            fontSize: "small",
+            textAlign: "center",
+            border: "1px solid #ccc",
+            padding: "5px",
+          }}
+        >
+          Redirigido desde: **{trackingInfo.sourceApp}**
         </p>
       )}
 
       <input
         type="email"
         value={email}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+          setEmail(e.target.value)
+        }
         placeholder="Email"
         required
       />
       <input
         type="password"
         value={password}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+          setPassword(e.target.value)
+        }
         placeholder="Contraseña"
         required
       />
