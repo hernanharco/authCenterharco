@@ -207,6 +207,9 @@ export const getAllUsers = async (): Promise<AuthenticatedUser[]> => {
   // Usamos supabase.auth.admin para acceder a la lista de usuarios
   const { data, error } = await supabase.auth.admin.listUsers();
 
+  // ⭐️ AÑADIR CONSOLE.LOG AQUÍ para ver el contenido de 'data' ⭐️
+  //console.log("Datos de listUsers:", data);
+
   if (error) {
     console.error("Error al obtener la lista de usuarios:", error.message);
     throw new Error("Error en la consulta de usuarios.");
@@ -228,7 +231,7 @@ export const getAllUsers = async (): Promise<AuthenticatedUser[]> => {
 
     const authenticatedUser: AuthenticatedUser = {
       // 3. CORRECCIÓN TS2783: Spread primero (para [key: string]: any)
-      ...user,
+      //...user,
 
       // 4. Sobrescribimos propiedades clave con los valores corregidos/garantizados
       id: user.id,
@@ -237,8 +240,10 @@ export const getAllUsers = async (): Promise<AuthenticatedUser[]> => {
       name,
       avatar,
       // Opcional: limpiar metadatos de Supabase si no son necesarios
-      user_metadata: user.user_metadata,
+      //user_metadata: user.user_metadata,
     };
+
+    console.log("datos de authenticatedUser: ", authenticatedUser);
 
     return authenticatedUser;
   });

@@ -14,6 +14,12 @@ const nextConfig: NextConfig = {
         // pero para i.pravatar.cc no lo es.
       },
     ],
+    domains: [
+      // Añade este dominio para las imágenes de perfil de Google
+      'lh3.googleusercontent.com', 
+      // Añade también los dominios de los mocks si los vas a usar:
+      'i.pravatar.cc'
+    ],
   },
 };
 

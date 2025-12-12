@@ -62,9 +62,18 @@ const Sidebar: FC<SidebarProps> = ({ handleLogout, profileData, isOpen, onClose,
 
     // Nota: Si quieres restringir 'Permisos' solo para Admins, 
     // debes filtrar este array basándote en profileData.role antes de mapearlo.
+    /*
+    Nombre en el Menú (Título), Ruta (href),                Icono Sugerido (Emoji),         Propósito
+    Gestión de Usuarios,        /dashboard/users,               👤,                         Ver la lista de todos los usuarios.
+    Asignación de Roles,        /dashboard/roles-assignment,    🎯,                         "Asignar roles (Admin, Editor, etc.) a usuarios."
+    Asignación de Permisos,     /dashboard/permission-transfer, 🔀,                         Arrastrar y Soltar Permisos a Roles (Tu componente anterior).
+    Catálogo de Permisos,       /dashboard/permission-catalog,  🔑,                         Crear/Modificar las definiciones maestras de permisos (Tu nuevo componente).*/
     const navItems: { name: string; href: string; icon: string }[] = [
-        { name: 'Dashboard', href: '/dashboard', icon: '🏠' },
-        { name: 'Permisos', href: '/dashboard/permissions', icon: '🔑' },        
+        //{ name: 'Dashboard', href: '/dashboard', icon: '🏠' },
+        { name: 'Gestión de Usuarios', href: '/dashboard/users', icon: '👤' },
+        { name: 'Asignación de Roles', href: '/dashboard/roles-assignment', icon: '🎯' },        
+        { name: 'Asignación de Permisos', href: '/dashboard/permission-transfer', icon: '🔀' },        
+        { name: 'Catálogo de Permisos', href: '/dashboard/permission-catalog', icon: '🔑' },        
     ];
     
     const sidebarStyle: React.CSSProperties = {
