@@ -99,4 +99,24 @@ router.post(
   }
 );
 
+// 7. RUTA PROTEGIDA POR ROL: Obtener lista de usuarios (solo administradores)
+router.get(
+  "/users",
+  authenticateToken,
+  hasRole("admin"),
+  async (req: Request, res: Response) => {
+    try {
+      const users = await authService.getAllUsers();
+      res.json({
+        message: "Lista de usuarios obtenida exitosamente.",
+        users: users,
+      });
+    } catch (error: any) {
+      // Manejo de error si el servicio falla (e.g., error de DB)
+      console.error(error.message);
+      res.status(500).json({ message: "Error al recuperar la lista de usuarios." });
+    }
+  }
+);
+
 export default router;

@@ -91,7 +91,7 @@ const AuthForm: React.FC = () => {
         });
 
         // 🚨 LÓGICA DE CIERRE DE VENTANA / REDIRECCIÓN (para Email/Password)
-        console.log("estoy en la parte if tranckingInfo: ", trackingInfo);
+        //console.log("estoy en la parte if tranckingInfo: ", trackingInfo);
         if (trackingInfo) {
           if (window.opener) {
             window.opener.postMessage({ type: "auth:refresh" }, "*");
