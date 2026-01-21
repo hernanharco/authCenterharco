@@ -9,7 +9,13 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    
+    // 🛑 NUEVAS PROPIEDADES PARA EL ALIAS DE RUTA
+    "baseUrl": "./src", 
+    "paths": {
+      "@/*": ["*"] 
+    }
   },
   "include": ["src", "src/types"]
 }
