@@ -140,24 +140,28 @@ router.patch('/profiles/:id/role', authenticateToken, async (req: any, res: Resp
 });
 
 // DELETE /api/profiles/:id
-router.delete('/profiles/:id', authenticateToken, hasRole('Admin'), async (req: Request, res: Response) => {
+// Solo un Admin o superior puede borrar, pero añadiremos una protección extra
+router.delete('/profiles/:id', authenticateToken, hasRole('Admin'), async (req: any, res: Response) => {
   const { id } = req.params;
+  const executorRole = req.user.role;
 
   try {
-    // 1. Eliminar de la tabla pública 'users'
-    const { error: tableError } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', id);
+    // Protección: Un 'Admin' no puede borrar a un 'SuperAdmin' o 'Owner'
+    const { data: targetUser } = await supabase.from('users').select('role').eq('id', id).single();
+    
+    if (targetUser && (targetUser.role === 'Owner' || targetUser.role === 'SuperAdmin')) {
+       if (executorRole === 'Admin') {
+         return res.status(403).json({ message: "No tienes nivel suficiente para borrar a este usuario." });
+       }
+    }
 
+    // 1. Eliminar de la tabla pública
+    const { error: tableError } = await supabase.from('users').delete().eq('id', id);
     if (tableError) throw tableError;
 
-    // 2. Eliminar de Supabase Auth (Sistema de autenticación)
+    // 2. Eliminar de Supabase Auth
     const { error: authError } = await supabase.auth.admin.deleteUser(id);
-
-    if (authError) {
-      console.warn("⚠️ Usuario borrado de la tabla pero no de Auth:", authError.message);
-    }
+    if (authError) console.warn("⚠️ Usuario borrado de tabla pero no de Auth");
 
     res.json({ success: true, message: 'Usuario eliminado correctamente' });
   } catch (error: any) {
@@ -177,7 +181,8 @@ router.get('/perfil', authenticateToken, (req: any, res: Response) => {
   });
 });
 
-// GET /api/admin/all-users - Datos crudos de Supabase Auth
+// GET /api/admin/all-users
+// Ahora, gracias al nuevo middleware, si eres SuperAdmin u Owner pasarás aunque pida 'Admin'
 router.get('/admin/all-users', authenticateToken, hasRole('Admin'), async (_req, res) => {
   try {
     const users = await getAllUsersFromAuth();

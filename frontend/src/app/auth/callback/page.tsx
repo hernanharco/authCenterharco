@@ -35,7 +35,7 @@ const AuthCallbackPage: React.FC = () => {
           body: {
             access_token: session.access_token,
             refresh_token: session.refresh_token,
-          },
+          } as any, 
         });
 
         setStatus("Éxito. Entrando al Dashboard...");

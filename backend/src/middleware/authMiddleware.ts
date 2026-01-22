@@ -1,41 +1,19 @@
-import { Response, NextFunction } from "express";
-import { AuthRequest } from "@/types/authReques";
+// backend/src/middleware/authMiddleware.ts
+import { Request, Response, NextFunction } from 'express';
+import { checkLevel, UserRole } from '@/types/permissionTypes';
 
-import { verifySupabaseToken, getUserRole } from "../services/authService";
+export const hasRole = (roleRequerido: UserRole) => {
+  return (req: any, res: Response, next: NextFunction) => {
+    // El rol que viene del Token JWT (auth.users metadata)
+    const userRole = req.user?.role;
 
-export async function authenticateToken(
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) {
-  const token = req.cookies?.authToken;
-
-  if (!token)
-    return res.status(401).json({ message: "No autenticado" });
-
-  try {
-    const payload = await verifySupabaseToken(token);
-    const role = await getUserRole(payload.sub);
-
-    req.user = {
-      id: payload.sub,
-      email: payload.email,
-      role,
-    };
-
-    next();
-  } catch (err) {
-    return res.status(401).json({ message: "Token inválido" });
-  }
-}
-
-export const hasRole =
-  (requiredRole: string) =>
-  (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (req.user?.role !== requiredRole) {
-      return res.status(403).json({
-        message: `Se requiere rol ${requiredRole}`,
-      });
+    if (checkLevel(userRole, roleRequerido)) {
+      return next();
     }
-    next();
+
+    return res.status(403).json({ 
+      success: false, 
+      message: `Acceso insuficiente. Se requiere ${roleRequerido}.` 
+    });
   };
+};
