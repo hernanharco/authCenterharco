@@ -1,6 +1,5 @@
 // frontend/src/utils/api.js
 
-<<<<<<< HEAD
 /**
  * URL base del backend de Express.
  * Se asegura de eliminar barras diagonales al final para evitar // en los endpoints.
@@ -17,25 +16,13 @@ export async function fetchApi(endpoint, options = {}) {
     // Aseguramos que el endpoint comience con /
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     
-=======
-const EXPRESS_URL = process.env.NEXT_PUBLIC_EXPRESS_URL;
-
-/**
- * Función genérica para hacer llamadas a la API de Express, incluyendo cookies.
- */
-export async function fetchApi(endpoint, options = {}) {
-    
->>>>>>> ecf70a1023dc14ecb200f4d29839e2b82f107d0c
     const defaultOptions = {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
         },
         // CRÍTICO: 'include' asegura que la cookie 'authToken' se envíe automáticamente.
-<<<<<<< HEAD
         // Esto es esencial para que tu arquitectura multi-tenant funcione correctamente.
-=======
->>>>>>> ecf70a1023dc14ecb200f4d29839e2b82f107d0c
         credentials: 'include', 
         ...options,
     };
@@ -44,7 +31,6 @@ export async function fetchApi(endpoint, options = {}) {
         defaultOptions.body = JSON.stringify(options.body);
     }
 
-<<<<<<< HEAD
     try {
         const response = await fetch(`${EXPRESS_URL}${cleanEndpoint}`, defaultOptions);
 
@@ -82,19 +68,4 @@ export async function fetchApi(endpoint, options = {}) {
         }
         throw error;
     }
-=======
-    const response = await fetch(`${EXPRESS_URL}${endpoint}`, defaultOptions);
-
-    if (response.status === 401 || response.status === 403) {
-        // Lanza un error para que el componente lo capture y redirija
-        throw new Error('Sesión expirada o no válida. Redirigiendo a login.'); 
-    }
-
-    if (!response.ok) {
-        const error = await response.json().catch(() => ({ message: 'Error de red/servidor' }));
-        throw new Error(error.message || `Error ${response.status}`);
-    }
-
-    return response.json();
->>>>>>> ecf70a1023dc14ecb200f4d29839e2b82f107d0c
 }

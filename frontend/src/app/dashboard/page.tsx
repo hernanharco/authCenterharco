@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -111,19 +110,3 @@ export default function Dashboard() {
     </div>
   );
 }
-=======
-// Nuevo archivo para la ruta /dashboard
-import React, { FC } from 'react';
-
-const DashboardIndexPage: FC = () => {
-  return (
-    <div>
-      <h2>🏠 Bienvenido al Dashboard Principal</h2>
-      <p>Utiliza el menú lateral para acceder a la gestión de usuarios y permisos.</p>
-      {/* Aquí podrías añadir un componente de resumen general si lo deseas */}
-    </div>
-  );
-};
-
-export default DashboardIndexPage;
->>>>>>> ecf70a1023dc14ecb200f4d29839e2b82f107d0c
