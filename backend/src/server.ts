@@ -7,12 +7,11 @@ import authRoutes from "./routes/authRoutes";
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// 1. CONFIGURACIÓN DE CORS
-// Permite que tu frontend (localhost:3000) envíe cookies al backend
+/// 1. CONFIGURACIÓN DE CORS
 app.use(cors({
   origin: "http://localhost:3000", 
   credentials: true,               
-  methods: ["GET", "POST", "OPTIONS"],
+  methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"], // Agregamos PATCH para los roles
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
@@ -20,9 +19,9 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
-// 3. REGISTRO DE RUTAS
-// Todas las rutas dentro de authRoutes tendrán el prefijo /auth
-app.use("/auth", authRoutes);
+// 3. REGISTRO DE RUTAS CON PREFIJO GLOBAL /api
+// Esto es estándar en arquitectura SaaS
+app.use("/api", authRoutes); 
 
 // Ruta base de salud
 app.get("/", (req, res) => {
@@ -39,7 +38,7 @@ app.use((req, res) => {
 // 5. INICIO DEL SERVIDOR
 app.listen(PORT, () => {
   console.log(`✅ Servidor SaaS corriendo en: http://localhost:${PORT}`);
-  console.log(`👉 Ruta perfil disponible en: http://localhost:${PORT}/auth/perfil`);
+  console.log(`👉 Ruta perfil disponible en: http://localhost:${PORT}/api/perfil`);
 }).on('error', (err: any) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`❌ El puerto ${PORT} está ocupado. Usa 'fuser -k ${PORT}/tcp'`);

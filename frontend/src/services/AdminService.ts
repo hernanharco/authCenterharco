@@ -13,7 +13,7 @@ const EXPRESS_BASE_URL = process.env.NEXT_PUBLIC_EXPRESS_URL || "http://localhos
  * en el backend Express.
  */
 export class AdminService {
-  private static URL_USERS = `${EXPRESS_BASE_URL}/auth/users`;
+  private static URL_USERS = `${EXPRESS_BASE_URL}/api/users`;
 
   /**
    * Ejecuta la consulta protegida 'GET /auth/users' para obtener la lista de usuarios.

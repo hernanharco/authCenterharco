@@ -3,10 +3,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../utils/supabase';
-import { fetchApi } from '../utils/api';
+import { supabase } from '@/utils/supabase';
+import { fetchApi } from '@/utils/api';
 import { useRouter } from 'next/navigation';
-import { useTrackingReader } from '../utils/useTrackingReader';
+import { useTrackingReader } from '@/utils/useTrackingReader';
 
 // ===============================================
 // INTERFACES
@@ -82,7 +82,7 @@ const AuthForm: React.FC = () => {
       const refreshToken: string | undefined = session?.refresh_token;
 
       if (accessToken && refreshToken) {
-        await fetchApi('/auth/set-cookie', {
+        await fetchApi('/api/set-cookie', {
           method: 'POST',
           body: {
             access_token: accessToken,

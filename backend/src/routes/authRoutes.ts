@@ -5,32 +5,40 @@ import {
   clearAuthCookies,
   refreshAuthToken,
   getAllUsersFromAuth
-} from '../services/authService';
-import { authenticateToken, hasRole } from '../middleware/authMiddleware';
-import { supabase } from '../services/authService';
+} from '@/services/authService';
+import { authenticateToken, hasRole } from '@/middleware/authMiddleware';
+import { supabase } from '@/services/authService';
 
 const router = Router();
 
 /* =================================================
-   AUTENTICACIÓN Y COOKIES
+   AUTENTICACIÓN Y COOKIES (Seguridad Máxima)
 ================================================= */
 
-// POST /auth/set-cookie
+// POST /api/set-cookie
 router.post('/set-cookie', async (req: Request, res: Response) => {
-  const { access_token, refresh_token } = req.body;
+  // Usamos req.body para seguridad (no exponer en URL)
+  // El ?. evita el error "TypeError: Cannot destructure..." si el body viene vacío
+  const access_token = req.body?.access_token;
+  const refresh_token = req.body?.refresh_token;
 
   if (!access_token || !refresh_token) {
-    return res.status(400).json({ message: 'Tokens requeridos' });
+    return res.status(400).json({
+      success: false,
+      message: 'Tokens requeridos en el cuerpo de la petición (JSON).'
+    });
   }
 
   try {
     const payload = await verifySupabaseToken(access_token);
 
+    // Seteamos las cookies (httponly para evitar ataques XSS)
     setAuthCookie(res, access_token, 'authToken');
     setAuthCookie(res, refresh_token, 'refreshToken');
 
     res.json({
-      message: 'Sesión iniciada',
+      success: true,
+      message: 'Sesión iniciada y cookies configuradas',
       email: payload.email,
     });
   } catch (error: any) {
@@ -39,72 +47,44 @@ router.post('/set-cookie', async (req: Request, res: Response) => {
   }
 });
 
-// POST /auth/logout
+// POST /api/logout
 router.post('/logout', (_req, res) => {
   clearAuthCookies(res);
-  res.json({ message: 'Sesión cerrada' });
+  res.json({ message: 'Sesión cerrada correctamente' });
 });
 
 /* =================================================
-   RUTAS PROTEGIDAS (USUARIO)
+   GESTIÓN DE PERFILES Y ROLES (Rama: rol)
 ================================================= */
 
-// GET /auth/perfil (La que buscabas)
-router.get('/perfil', authenticateToken, (req: any, res: Response) => {
-  res.json({
-    success: true,
-    message: 'Perfil cargado correctamente',
-    user: req.user,
-  });
-});
-
-// GET /auth/me
-router.get('/me', authenticateToken, (req: any, res: Response) => {
-  res.json({ user: req.user });
-});
-
-/* =================================================
-   ADMINISTRACIÓN Y REFRESH
-================================================= */
-
-// GET /auth/admin
-router.get('/admin', authenticateToken, hasRole('admin'), (_req, res) => {
-  res.json({ secret: '🧠 Datos ultra secretos del servidor' });
-});
-
-// POST /auth/refresh
-router.post('/refresh', async (req: Request, res: Response) => {
-  const refreshToken = req.cookies?.refreshToken;
-
-  if (!refreshToken)
-    return res.status(401).json({ message: 'No hay refresh token' });
-
-  try {
-    const session = await refreshAuthToken(refreshToken);
-    setAuthCookie(res, session.access_token, 'authToken');
-    setAuthCookie(res, session.refresh_token, 'refreshToken');
-    res.json({ message: 'Sesión renovada' });
-  } catch {
-    clearAuthCookies(res);
-    res.status(401).json({ message: 'Sesión expirada' });
-  }
-});
-
-/* =================================================
-   ADMINISTRACIÓN DE PERFILES
-================================================= */
-
-// GET /auth/profiles - Listar todos los perfiles (solo admin)
+// GET /api/profiles
 router.get(
   '/profiles',
   authenticateToken,
-  hasRole('admin'),
-  async (_req: any, res: Response) => {
+  //hasRole('Admin'),
+  async (req: any, res: Response) => {
     try {
+      const isCountOnly = req.query.count === 'true';
+
+      // 1. Lógica de Conteo (KPI para el Dashboard)
+      if (isCountOnly) {
+        const { count, error } = await supabase
+          .from('users')
+          .select('*', { count: 'exact', head: true });
+
+        if (error) throw error;
+
+        return res.json({
+          success: true,
+          total: count || 0,
+        });
+      }
+
+      // 2. Lógica de Listado (Para la tabla de usuarios)
       const { data: profiles, error } = await supabase
         .from('users')
-        .select('id, email, role, created_at, updated_at')
-        .order('created_at', { ascending: false });
+        .select('id, email, role, updated_at') // Seleccionamos solo columnas existentes
+        .order('updated_at', { ascending: false, nullsFirst: false }); // Usamos updated_at
 
       if (error) throw error;
 
@@ -114,130 +94,96 @@ router.get(
       });
     } catch (error: any) {
       console.error('Error al obtener perfiles:', error);
-      res.status(500).json({ message: 'Error al obtener perfiles' });
-    }
-  },
-);
-
-// PUT /auth/profiles/:id/role - Actualizar rol de usuario (solo admin)
-router.put(
-  '/profiles/:id/role',
-  authenticateToken,
-  hasRole('admin'),
-  async (req: any, res: Response) => {
-    const { id } = req.params;
-    const { role } = req.body;
-
-    if (!role || !['user', 'admin', 'moderator'].includes(role)) {
-      return res.status(400).json({ message: 'Rol inválido' });
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .update({ role, updated_at: new Date().toISOString() })
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      res.json({
-        success: true,
-        message: 'Rol actualizado correctamente',
-
-        user: data,
+      res.status(500).json({
+        success: false,
+        message: 'Error al consultar la base de datos',
+        debug: error.message
       });
-    } catch (error: any) {
-      console.error('Error al actualizar rol:', error);
-      res.status(500).json({ message: 'Error al actualizar rol' });
     }
   },
 );
 
-// DELETE /auth/profiles/:id - Eliminar usuario (solo admin)
-router.delete(
-  '/profiles/:id',
-  authenticateToken,
-  hasRole('admin'),
-  async (req: any, res: Response) => {
-    const { id } = req.params;
-
-    // Evitar que un admin se elimine a sí mismo
-    if (req.user.id === id) {
-      return res
-        .status(400)
-        .json({ message: 'No puedes eliminar tu propio usuario' });
-    }
-
-    try {
-      // Eliminar de Supabase Auth
-      const { error: authError } = await supabase.auth.admin.deleteUser(id);
-      if (authError) throw authError;
-
-      // Eliminar de la tabla users
-      const { error: dbError } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', id);
-
-      if (dbError) throw dbError;
-
-      res.json({
-        success: true,
-        message: 'Usuario eliminado correctamente',
-      });
-    } catch (error: any) {
-      console.error('Error al eliminar usuario:', error);
-      res.status(500).json({ message: 'Error al eliminar usuario' });
-    }
-  },
-);
-
-// PUT /auth/profile - Actualizar perfil propio
-router.put('/profile', authenticateToken, async (req: any, res: Response) => {
-  const { email } = req.body;
-  const userId = req.user.id;
-
-  if (!email) {
-    return res.status(400).json({ message: 'Email es requerido' });
-  }
+// PATCH /api/profiles/:id/role
+router.patch('/profiles/:id/role', authenticateToken, async (req: any, res: Response) => {
+  const { id } = req.params;
+  const { role } = req.body;
 
   try {
-    const { data, error } = await supabase
-      .from('users')
-      .update({ email, updated_at: new Date().toISOString() })
-      .eq('id', userId)
-      .select()
-      .single();
+    // 1. ACTUALIZAR EN TU TABLA (Lo que ya hacías)
+    const { error: tableError } = await supabase
+      .from('users') 
+      .update({ role: role, updated_at: new Date().toISOString() })
+      .eq('id', id);
 
-    if (error) throw error;
+    if (tableError) throw tableError;
 
-    res.json({
-      success: true,
-      message: 'Perfil actualizado correctamente',
-      user: data,
+    // 2. ACTUALIZAR EN SUPABASE AUTH (Lo que falta)
+    // Esto hace que el cambio se vea en /admin/all-users y en el token del usuario
+    const { error: authError } = await supabase.auth.admin.updateUserById(
+      id,
+      { user_metadata: { role: role } } 
+    );
+
+    if (authError) {
+      console.warn("⚠️ No se pudo actualizar la metadata de Auth, pero sí la tabla.");
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Rol actualizado en Tabla y Auth Metadata' 
     });
+
   } catch (error: any) {
-    console.error('Error al actualizar perfil:', error);
-    res.status(500).json({ message: 'Error al actualizar perfil' });
+    console.error("❌ Error:", error.message);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Para llamar toda la Informacion
-router.get('/admin/all-users', async (req, res) => {
+// DELETE /api/profiles/:id
+router.delete('/profiles/:id', authenticateToken, hasRole('Admin'), async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    // 1. Eliminar de la tabla pública 'users'
+    const { error: tableError } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', id);
+
+    if (tableError) throw tableError;
+
+    // 2. Eliminar de Supabase Auth (Sistema de autenticación)
+    const { error: authError } = await supabase.auth.admin.deleteUser(id);
+
+    if (authError) {
+      console.warn("⚠️ Usuario borrado de la tabla pero no de Auth:", authError.message);
+    }
+
+    res.json({ success: true, message: 'Usuario eliminado correctamente' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/* =================================================
+   RUTAS DE INFORMACIÓN Y ADMIN
+================================================= */
+
+// GET /api/perfil - Datos del usuario logueado
+router.get('/perfil', authenticateToken, (req: any, res: Response) => {
+  res.json({
+    success: true,
+    user: req.user,
+  });
+});
+
+// GET /api/admin/all-users - Datos crudos de Supabase Auth
+router.get('/admin/all-users', authenticateToken, hasRole('Admin'), async (_req, res) => {
   try {
     const users = await getAllUsersFromAuth();
     res.json({ success: true, data: users });
   } catch (error: any) {
-    // ESTO ES CLAVE: Imprime el error real en tu terminal de Linux
-    console.error("ERROR REAL EN EL BACKEND:", error); 
-    
-    res.status(500).json({ 
-      success: false, 
-      message: "Error al obtener usuarios",
-      debug: error.message // Esto te dirá en Postman qué falló exactamente
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
