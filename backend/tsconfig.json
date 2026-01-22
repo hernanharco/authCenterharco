@@ -10,6 +10,7 @@
     "rootDir": "./src",
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
+<<<<<<< HEAD
     /* --- CONFIGURACIÓN DE RUTAS --- */
     "baseUrl": ".", 
     "paths": {
@@ -18,4 +19,14 @@
   },
   "include": ["src/**/*", "src/types/**/*"],
   "exclude": ["node_modules", "dist"]
+=======
+    
+    // 🛑 NUEVAS PROPIEDADES PARA EL ALIAS DE RUTA
+    "baseUrl": "./src", 
+    "paths": {
+      "@/*": ["*"] 
+    }
+  },
+  "include": ["src", "src/types"]
+>>>>>>> ecf70a1023dc14ecb200f4d29839e2b82f107d0c
 }
