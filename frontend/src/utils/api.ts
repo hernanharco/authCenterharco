@@ -75,5 +75,6 @@ export async function fetchApi<T = ApiResponse>(
         
         // Re-lanzar el error para que el componente (Dashboard) pueda manejarlo
         throw error;
-    }
+    }    
 }
+

@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { supabase } from "@/utils/supabase";
 import { fetchApi } from "@/utils/api";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
-const AuthCallbackPage: React.FC = () => {
+// Sub-componente para manejar la lógica con hooks de búsqueda
+const AuthHandler = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [status, setStatus] = useState<string>("Iniciando procesamiento...");
 
   useEffect(() => {
@@ -16,46 +18,71 @@ const AuthCallbackPage: React.FC = () => {
         const { data: { session }, error } = await supabase.auth.getSession();
 
         if (error || !session) {
-          console.error("Error de sesión:", error);
           router.push("/");
           return;
         }
 
-        // 🚀 SOLUCIÓN A TU IMAGEN: LIMPIEZA VISUAL INMEDIATA
-        // Reemplaza la URL con tokens (#access_token=...) por una URL limpia.
-        if (typeof window !== "undefined") {
-          window.history.replaceState(null, "", window.location.pathname);
-        }
-
         setStatus("Protegiendo tu sesión de forma segura...");
 
-        // Enviamos los tokens por el BODY (Invisible en la URL)
+        // Sincronizamos cookies con tu Backend de Express (Puerto 4000)
         await fetchApi("/set-cookie", {
           method: "POST",
           body: {
             access_token: session.access_token,
             refresh_token: session.refresh_token,
-          } as any, 
+          } as any,
         });
 
-        setStatus("Éxito. Entrando al Dashboard...");
-        router.push("/dashboard");
+        setStatus("Sincronizando con la aplicación...");
+
+        const userRole = session.user?.user_metadata?.role || 'Viewer';
+
+        if (window.opener) {
+          // 🚨 SEGURIDAD: Obtenemos el origin desde los parámetros de la URL
+          // Si no existe, usamos "*" pero lo ideal es el origin de la tapicería
+          const redirectTo = searchParams.get('redirect_to');
+          const targetOrigin = redirectTo ? new URL(redirectTo).origin : "*";
+
+          window.opener.postMessage({
+            type: 'auth:success',
+            payload: {
+              accessToken: session.access_token,
+              refreshToken: session.refresh_token,
+              role: userRole
+            }
+          }, targetOrigin); 
+
+          window.close();
+        } else {
+          router.push("/dashboard");
+        }
+
       } catch (err) {
-        console.error("Error en el flujo de autenticación:", err);
-        router.push("/");
+        console.error("Error en el flujo:", err);
+        router.push("/?error=callback_error");
       }
     };
 
     handleAuth();
-  }, [router]);
+  }, [router, searchParams]);
 
   return (
+    <div className="p-8 bg-white shadow-xl rounded-2xl text-center space-y-4">
+      <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+      <h1 className="text-xl font-bold text-slate-800">Finalizando Login</h1>
+      <p className="text-slate-500">{status}</p>
+      <p className="text-[10px] text-slate-400 italic">Esta ventana se cerrará automáticamente</p>
+    </div>
+  );
+};
+
+// Componente principal con Suspense (Requerido por Next.js para useSearchParams)
+const AuthCallbackPage: React.FC = () => {
+  return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50">
-      <div className="p-8 bg-white shadow-xl rounded-2xl text-center space-y-4">
-        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-        <h1 className="text-xl font-bold text-slate-800">Finalizando Login</h1>
-        <p className="text-slate-500">{status}</p>
-      </div>
+      <Suspense fallback={<div>Cargando...</div>}>
+        <AuthHandler />
+      </Suspense>
     </div>
   );
 };

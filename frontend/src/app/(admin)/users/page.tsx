@@ -23,6 +23,9 @@ export default function PageUsers() {
         fetchApi('/admin/all-users')
       ]);
 
+      console.log('myProfile:', myProfile);
+      console.log('allUsersData:', allUsersData);
+
       if (myProfile?.user) {
         setProfileData({
           ...myProfile.user,

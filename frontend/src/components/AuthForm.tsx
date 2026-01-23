@@ -1,5 +1,3 @@
-// frontend/src/components/AuthForm.tsx (MODIFICADO)
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -8,31 +6,8 @@ import { fetchApi } from '@/utils/api';
 import { useRouter } from 'next/navigation';
 import { useTrackingReader } from '@/utils/useTrackingReader';
 
-// ===============================================
-// INTERFACES
-// ===============================================
-
-interface SupabaseError {
-  message: string;
-}
-
-interface AuthSessionResponse {
-  error: SupabaseError | null;
-  data: {
-    session: {
-      access_token: string;
-      refresh_token: string;
-    } | null;
-  };
-}
-
-interface TrackingData {
-  sourceApp: string;
-  timestamp: string;
-  status: string;
-}
-
-// ===============================================
+// Importamos los tipos externos
+import { TrackingData, SupabaseError } from '@/types/auth';
 
 const AuthForm: React.FC = () => {
   const [email, setEmail] = useState<string>('');
@@ -52,56 +27,67 @@ const AuthForm: React.FC = () => {
 
   // ----------------------------------------------------
   // Lógica para Login/Registro por Email/Contraseña
-  // (Sin cambios, ya maneja trackingInfo)
   // ----------------------------------------------------
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     setError(null);
 
     try {
-      let authResponse: AuthSessionResponse;
-      console.log('bandera0');
+      let authResponse: any;
+
+      // --- PASO 1: AUTENTICACIÓN ---
       if (isLogin) {
-        authResponse = (await supabase.auth.signInWithPassword({
+        authResponse = await supabase.auth.signInWithPassword({
           email,
           password,
-        })) as AuthSessionResponse;
+        });
       } else {
-        authResponse = (await supabase.auth.signUp({
+        // Inyectamos el ROL solo en el registro
+        authResponse = await supabase.auth.signUp({
           email,
           password,
-        })) as AuthSessionResponse;
+          options: {
+            data: {
+              role: 'Viewer',
+              source_app: trackingInfo?.sourceApp || 'direct',
+            },
+          },
+        });
       }
 
-      if (authResponse.error) {
-        throw authResponse.error;
-      }
+      if (authResponse.error) throw authResponse.error;
 
+      // Obtenemos la sesión real de la respuesta de Supabase
       const session = authResponse.data.session;
-      const accessToken: string | undefined = session?.access_token;
-      const refreshToken: string | undefined = session?.refresh_token;
 
-      if (accessToken && refreshToken) {
+      if (session) {
+        // --- PASO 2: PERSISTENCIA (COOKIES) ---
+        // Usamos 'as any' para el body para evitar el error de ReadableStream de TS
         await fetchApi('/api/set-cookie', {
           method: 'POST',
           body: {
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          },
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          } as any,
         });
 
-        // 🚨 LÓGICA DE CIERRE DE VENTANA / REDIRECCIÓN (para Email/Password)
-        console.log('estoy en la parte if tranckingInfo: ', trackingInfo);
-        if (trackingInfo) {
-          if (window.opener) {
-            window.opener.postMessage({ type: 'auth:refresh' }, '*');
-            window.close();
-          } else {
-            // Si no hay window.opener, no intentes cerrar, redirige.
-            router.push('/');
-          }
-        } else {
-          router.push('/dashboard');
+        // --- PASO 3: CIERRE O REDIRECCIÓN (POPUP CONTROL) ---
+        // --- PASO 3: CIERRE O REDIRECCIÓN (POPUP CONTROL) ---
+        if (window.opener) {
+          const userRole = session.user?.user_metadata?.role || 'Viewer';
+
+          // 🚨 ACTUALIZACIÓN: Enviamos el payload completo como en el Callback
+          window.opener.postMessage({
+            type: 'auth:success',
+            payload: {
+              accessToken: session.access_token,
+              refreshToken: session.refresh_token,
+              role: userRole
+            }
+          }, "*"); // O el origin específico si ya lo tienes validado
+
+          window.opener.location.reload();
+          window.close();
         }
       }
     } catch (err) {
@@ -115,27 +101,23 @@ const AuthForm: React.FC = () => {
   };
 
   // ----------------------------------------------------
-  // FUNCIÓN NUEVA: LOGIN CON GOOGLE (OAuth) (MODIFICADO)
+  // LOGIN CON GOOGLE (OAuth)
   // ----------------------------------------------------
   const handleGoogleLogin = async (): Promise<void> => {
     setError(null);
     try {
-      // 🚨 1. Preparamos el URL de redirección base
       let redirectToUrl = `${window.location.origin}/auth/callback`;
 
-      // 🚨 2. Si existe trackingInfo, lo añadimos a la URL
       if (trackingInfo) {
-        // Debemos recodificar la data para pasarla a la URL de redirección
-        const jsonString: string = JSON.stringify(trackingInfo);
-        const encodedData: string = encodeURIComponent(jsonString);
-
-        // Adjuntamos el parámetro 'tracking' al redirectTo
+        const jsonString = JSON.stringify(trackingInfo);
+        const encodedData = encodeURIComponent(jsonString);
         redirectToUrl = `${redirectToUrl}?tracking=${encodedData}`;
       }
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: redirectToUrl, // Usamos la URL modificada
+          redirectTo: redirectToUrl,
         },
       });
 
@@ -151,74 +133,67 @@ const AuthForm: React.FC = () => {
   };
 
   return (
-    // ... (JSX sin cambios)
     <form
       onSubmit={handleSubmit}
-      style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}
+      className="flex flex-col gap-4 p-4 border rounded-lg shadow-sm bg-white max-w-md mx-auto"
     >
-      <h2>{isLogin ? '🔑 Iniciar Sesión' : '📝 Crear Cuenta'}</h2>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+      <h2 className="text-xl font-bold text-center">
+        {isLogin ? '🔑 Iniciar Sesión' : '📝 Crear Cuenta'}
+      </h2>
+
+      {error && <p className="text-red-500 text-sm text-center font-medium">{error}</p>}
 
       {trackingInfo && (
-        <p
-          style={{
-            color: 'green',
-            fontSize: 'small',
-            textAlign: 'center',
-            border: '1px solid #ccc',
-            padding: '5px',
-          }}
-        >
-          Redirigido desde: **{trackingInfo.sourceApp}**
+        <p className="text-emerald-600 text-xs text-center border border-emerald-100 bg-emerald-50 p-2 rounded">
+          Redirigido desde: <span className="font-bold">{trackingInfo.sourceApp}</span>
         </p>
       )}
 
-      <input
-        type="email"
-        value={email}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-          setEmail(e.target.value)
-        }
-        placeholder="Email"
-        required
-      />
-      <input
-        type="password"
-        value={password}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-          setPassword(e.target.value)
-        }
-        placeholder="Contraseña"
-        required
-      />
+      <div className="flex flex-col gap-3">
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Email"
+          className="p-2 border rounded focus:ring-2 focus:ring-primary outline-none"
+          required
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Contraseña"
+          className="p-2 border rounded focus:ring-2 focus:ring-primary outline-none"
+          required
+        />
+      </div>
 
-      <button type="submit" disabled={!email || !password}>
+      <button
+        type="submit"
+        disabled={!email || !password}
+        className="bg-slate-900 text-white p-2 rounded font-bold hover:bg-slate-800 disabled:opacity-50 transition-colors"
+      >
         {isLogin ? 'Entrar' : 'Registrar'}
       </button>
 
-      <p style={{ textAlign: 'center' }}>— O —</p>
+      <div className="relative my-2">
+        <div className="absolute inset-0 flex items-center"><span className="w-full border-t"></span></div>
+        <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-muted-foreground">O continuar con</span></div>
+      </div>
 
       <button
         type="button"
         onClick={handleGoogleLogin}
-        style={{
-          backgroundColor: '#DB4437',
-          color: 'white',
-          border: 'none',
-          padding: '10px',
-          cursor: 'pointer',
-        }}
+        className="flex items-center justify-center gap-2 bg-[#DB4437] text-white p-2 rounded font-bold hover:bg-[#c5372c] transition-colors"
       >
-        Iniciar Sesión con Google 🚀
+        <span>Google 🚀</span>
       </button>
 
       <p
         onClick={() => setIsLogin(!isLogin)}
-        style={{ cursor: 'pointer', textAlign: 'center', fontSize: 'small' }}
+        className="cursor-pointer text-center text-xs text-slate-500 hover:underline mt-2"
       >
-        {isLogin
-          ? '¿No tienes cuenta? Regístrate'
-          : '¿Ya tienes cuenta? Inicia Sesión'}
+        {isLogin ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Inicia Sesión'}
       </p>
     </form>
   );

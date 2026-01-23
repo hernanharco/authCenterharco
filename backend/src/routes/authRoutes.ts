@@ -6,7 +6,7 @@ import {
   refreshAuthToken,
   getAllUsersFromAuth
 } from '@/services/authService';
-import { authenticateToken, hasRole } from '@/middleware/authMiddleware';
+import { verifySession, hasRole } from '../middleware/authMiddleware';
 import { supabase } from '@/services/authService';
 
 const router = Router();
@@ -60,7 +60,6 @@ router.post('/logout', (_req, res) => {
 // GET /api/profiles
 router.get(
   '/profiles',
-  authenticateToken,
   //hasRole('Admin'),
   async (req: any, res: Response) => {
     try {
@@ -104,14 +103,14 @@ router.get(
 );
 
 // PATCH /api/profiles/:id/role
-router.patch('/profiles/:id/role', authenticateToken, async (req: any, res: Response) => {
+router.patch('/profiles/:id/role', hasRole('Admin'), async (req: any, res: Response) => {
   const { id } = req.params;
   const { role } = req.body;
 
   try {
     // 1. ACTUALIZAR EN TU TABLA (Lo que ya hacías)
     const { error: tableError } = await supabase
-      .from('users') 
+      .from('users')
       .update({ role: role, updated_at: new Date().toISOString() })
       .eq('id', id);
 
@@ -121,16 +120,16 @@ router.patch('/profiles/:id/role', authenticateToken, async (req: any, res: Resp
     // Esto hace que el cambio se vea en /admin/all-users y en el token del usuario
     const { error: authError } = await supabase.auth.admin.updateUserById(
       id,
-      { user_metadata: { role: role } } 
+      { user_metadata: { role: role } }
     );
 
     if (authError) {
       console.warn("⚠️ No se pudo actualizar la metadata de Auth, pero sí la tabla.");
     }
 
-    res.json({ 
-      success: true, 
-      message: 'Rol actualizado en Tabla y Auth Metadata' 
+    res.json({
+      success: true,
+      message: 'Rol actualizado en Tabla y Auth Metadata'
     });
 
   } catch (error: any) {
@@ -141,18 +140,18 @@ router.patch('/profiles/:id/role', authenticateToken, async (req: any, res: Resp
 
 // DELETE /api/profiles/:id
 // Solo un Admin o superior puede borrar, pero añadiremos una protección extra
-router.delete('/profiles/:id', authenticateToken, hasRole('Admin'), async (req: any, res: Response) => {
+router.delete('/profiles/:id', hasRole('Admin'), async (req: any, res: Response) => {
   const { id } = req.params;
   const executorRole = req.user.role;
 
   try {
     // Protección: Un 'Admin' no puede borrar a un 'SuperAdmin' o 'Owner'
     const { data: targetUser } = await supabase.from('users').select('role').eq('id', id).single();
-    
+
     if (targetUser && (targetUser.role === 'Owner' || targetUser.role === 'SuperAdmin')) {
-       if (executorRole === 'Admin') {
-         return res.status(403).json({ message: "No tienes nivel suficiente para borrar a este usuario." });
-       }
+      if (executorRole === 'Admin') {
+        return res.status(403).json({ message: "No tienes nivel suficiente para borrar a este usuario." });
+      }
     }
 
     // 1. Eliminar de la tabla pública
@@ -174,7 +173,7 @@ router.delete('/profiles/:id', authenticateToken, hasRole('Admin'), async (req: 
 ================================================= */
 
 // GET /api/perfil - Datos del usuario logueado
-router.get('/perfil', authenticateToken, (req: any, res: Response) => {
+router.get('/perfil', verifySession, hasRole('Viewer'), (req: any, res: Response) => {
   res.json({
     success: true,
     user: req.user,
@@ -183,12 +182,22 @@ router.get('/perfil', authenticateToken, (req: any, res: Response) => {
 
 // GET /api/admin/all-users
 // Ahora, gracias al nuevo middleware, si eres SuperAdmin u Owner pasarás aunque pida 'Admin'
-router.get('/admin/all-users', authenticateToken, hasRole('Admin'), async (_req, res) => {
+// GET /api/admin/all-users
+router.get('/admin/all-users', verifySession, hasRole('Admin'), async (req, res) => {
   try {
+    // Usamos la función del servicio que ya tiene lógica de supabaseAdmin
     const users = await getAllUsersFromAuth();
-    res.json({ success: true, data: users });
+
+    res.json({ 
+      success: true, 
+      data: users 
+    });
   } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+    console.error("Error en la ruta admin:", error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: "Error interno al obtener usuarios" 
+    });
   }
 });
 
