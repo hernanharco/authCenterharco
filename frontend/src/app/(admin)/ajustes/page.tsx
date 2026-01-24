@@ -1,4 +1,4 @@
-import { Settings, Shield, Database, Globe } from "lucide-react";
+import { Settings, Database } from "lucide-react";
 
 export default function AjustesPage() {
   return (

@@ -167,7 +167,7 @@ check_services() {
     log_step "Verificando estado de los servicios..."
     
     # Esperar un momento para que los servicios inicien
-    sleep 10
+    sleep 15
     
     # Verificar estado de los contenedores
     if $COMPOSE_CMD ps | grep -q "Up"; then
@@ -180,15 +180,37 @@ check_services() {
         exit 1
     fi
     
-    # Verificar health checks
-    log_info "Esperando health checks..."
-    sleep 30
+    # Verificar health checks con más tiempo y reintentos
+    log_info "Esperando health checks (puede tomar hasta 2 minutos)..."
     
-    if $COMPOSE_CMD ps | grep -q "healthy"; then
-        log_success "Servicios saludables"
+    local retries=0
+    local max_retries=12  # 12 * 10 segundos = 2 minutos
+    
+    while [[ $retries -lt $max_retries ]]; do
+        sleep 10
+        retries=$((retries + 1))
+        
+        if $COMPOSE_CMD ps | grep -q "healthy"; then
+            log_success "✅ Todos los servicios están saludables"
+            $COMPOSE_CMD ps
+            return 0
+        fi
+        
+        log_info "Esperando health checks... (${retries}/${max_retries})"
+    done
+    
+    # Si después de todos los reintentos no está healthy, mostrar advertencia
+    log_warning "⚠️  Algunos servicios podrían no estar completamente listos, pero están corriendo"
+    $COMPOSE_CMD ps
+    
+    # Verificar si los contenedores están up aunque no sean healthy
+    if $COMPOSE_CMD ps | grep -q "Up"; then
+        log_info "Los contenedores están corriendo. Los health checks pueden necesitar más tiempo."
+        return 0
     else
-        log_warning "Algunos servicios podrían no estar completamente listos"
-        $COMPOSE_CMD ps
+        log_error "Los contenedores no están corriendo correctamente"
+        $COMPOSE_CMD logs --tail=50
+        return 1
     fi
 }
 

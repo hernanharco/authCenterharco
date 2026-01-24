@@ -52,8 +52,8 @@ USER nodejs
 EXPOSE 4000
 
 # Modificamos el Healthcheck para ser más tolerantes en el arranque
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=5 \
-  CMD curl -f http://localhost:4000/api/perfil || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD curl -f http://127.0.0.1:4000/ || exit 1
 
 # Usamos node directamente para evitar overhead de pnpm en el inicio
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/server.js"]
