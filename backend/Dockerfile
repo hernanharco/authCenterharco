@@ -1,5 +1,5 @@
 # --- ETAPA BASE ---
-FROM node:18-alpine AS base
+FROM node:20-alpine AS base
 RUN npm install -g pnpm
 
 # --- ETAPA DE COMPILACIÓN (BUILDER) ---
