@@ -3,200 +3,188 @@ import {
   verifySupabaseToken,
   setAuthCookie,
   clearAuthCookies,
-  refreshAuthToken,
-  getAllUsersFromAuth
+  getAllUsersFromAuth,
+  updateUserRole, // Importante añadir esta
+  supabase,
+  supabaseAdmin, // Necesario para el DELETE  
 } from '@/services/authService';
 import { verifySession, hasRole } from '../middleware/authMiddleware';
-import { supabase } from '@/services/authService';
 
 const router = Router();
 
 /* =================================================
-   AUTENTICACIÓN Y COOKIES (Seguridad Máxima)
+   1. AUTENTICACIÓN Y COOKIES
 ================================================= */
 
-// POST /api/set-cookie
-router.post('/set-cookie', async (req: Request, res: Response) => {
-  // Usamos req.body para seguridad (no exponer en URL)
-  // El ?. evita el error "TypeError: Cannot destructure..." si el body viene vacío
-  const access_token = req.body?.access_token;
-  const refresh_token = req.body?.refresh_token;
+// Reemplaza el endpoint /set-cookie
 
-  if (!access_token || !refresh_token) {
+router.post('/set-cookie', async (req: Request, res: Response) => {
+  const access_token = req.body?.access_token;
+
+  console.log("\n🔄 === SINCRONIZANDO TOKEN ===");
+  console.log("Access Token presente:", !!access_token);
+
+  if (!access_token) {
     return res.status(400).json({
       success: false,
-      message: 'Tokens requeridos en el cuerpo de la petición (JSON).'
+      message: 'Access token requerido.'
+    });
+  }
+
+  // Validación del Access Token (debe ser JWT)
+  const isValidJWT = (token: string) => token.split('.').length === 3;
+
+  if (!isValidJWT(access_token)) {
+    console.error("❌ Access token NO es un JWT válido");
+    return res.status(400).json({
+      success: false,
+      message: 'Access token inválido (no es JWT)'
     });
   }
 
   try {
+    // Validar el access token
     const payload = await verifySupabaseToken(access_token);
 
-    // Seteamos las cookies (httponly para evitar ataques XSS)
-    setAuthCookie(res, access_token, 'authToken');
-    setAuthCookie(res, refresh_token, 'refreshToken');
+    console.log("✅ Access token validado para:", payload.email);
 
-    res.json({
+    // ✅ SOLUCIÓN: Solo establecemos el access token como cookie
+    // La cookie tendrá una duración de 1 hora (igual que el token)
+    setAuthCookie(res, access_token, 'authToken');
+
+    console.log("✅ Cookie de sesión actualizada");
+    console.log("⏰ Próxima renovación automática en ~50 minutos");
+    console.log("=================================\n");
+
+    return res.json({
       success: true,
-      message: 'Sesión iniciada y cookies configuradas',
+      message: 'Sesión sincronizada',
       email: payload.email,
+      role: payload.role
     });
   } catch (error: any) {
-    console.error('❌ Error en set-cookie:', error.message);
-    res.status(401).json({ message: 'Token inválido', error: error.message });
+    console.error("❌ Error al validar access token:", error.message);
+    return res.status(401).json({
+      success: false,
+      message: 'Access token inválido',
+      details: error.message
+    });
   }
-});
-
-// POST /api/logout
-router.post('/logout', (_req, res) => {
-  clearAuthCookies(res);
-  res.json({ message: 'Sesión cerrada correctamente' });
 });
 
 /* =================================================
-   GESTIÓN DE PERFILES Y ROLES (Rama: rol)
+   2. GESTIÓN DE PERFILES (Dashboard)
 ================================================= */
 
-// GET /api/profiles
-router.get(
-  '/profiles',
-  //hasRole('Admin'),
-  async (req: any, res: Response) => {
-    try {
-      const isCountOnly = req.query.count === 'true';
+// GET /api/profiles - Listado de usuarios para la tabla
+router.get('/profiles', verifySession, hasRole('Admin'), async (req: any, res: Response) => {
+  try {
+    const isCountOnly = req.query.count === 'true';
 
-      // 1. Lógica de Conteo (KPI para el Dashboard)
-      if (isCountOnly) {
-        const { count, error } = await supabase
-          .from('users')
-          .select('*', { count: 'exact', head: true });
-
-        if (error) throw error;
-
-        return res.json({
-          success: true,
-          total: count || 0,
-        });
-      }
-
-      // 2. Lógica de Listado (Para la tabla de usuarios)
-      const { data: profiles, error } = await supabase
-        .from('users')
-        .select('id, email, role, updated_at') // Seleccionamos solo columnas existentes
-        .order('updated_at', { ascending: false, nullsFirst: false }); // Usamos updated_at
-
+    if (isCountOnly) {
+      const { count, error } = await supabase.from('users').select('*', { count: 'exact', head: true });
       if (error) throw error;
-
-      res.json({
-        success: true,
-        profiles: profiles || [],
-      });
-    } catch (error: any) {
-      console.error('Error al obtener perfiles:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error al consultar la base de datos',
-        debug: error.message
-      });
+      return res.json({ success: true, total: count || 0 });
     }
-  },
-);
 
-// PATCH /api/profiles/:id/role
-router.patch('/profiles/:id/role', hasRole('Admin'), async (req: any, res: Response) => {
+    const { data: profiles, error } = await supabase
+      .from('users')
+      .select('id, email, role, updated_at')
+      .order('updated_at', { ascending: false });
+
+    if (error) throw error;
+    res.json({ success: true, profiles: profiles || [] });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Error en base de datos', error: error.message });
+  }
+});
+
+// PATCH /api/profiles/:id/role - Actualización de rango con jerarquía
+router.patch('/profiles/:id/role', verifySession, hasRole('Admin'), async (req: any, res: Response) => {
   const { id } = req.params;
   const { role } = req.body;
+  const executorRole = req.user.role;
 
   try {
-    // 1. ACTUALIZAR EN TU TABLA (Lo que ya hacías)
-    const { error: tableError } = await supabase
-      .from('users')
-      .update({ role: role, updated_at: new Date().toISOString() })
-      .eq('id', id);
-
-    if (tableError) throw tableError;
-
-    // 2. ACTUALIZAR EN SUPABASE AUTH (Lo que falta)
-    // Esto hace que el cambio se vea en /admin/all-users y en el token del usuario
-    const { error: authError } = await supabase.auth.admin.updateUserById(
-      id,
-      { user_metadata: { role: role } }
-    );
-
-    if (authError) {
-      console.warn("⚠️ No se pudo actualizar la metadata de Auth, pero sí la tabla.");
+    // Protección de jerarquía: Un Admin no puede crear SuperAdmins/Owners
+    if ((role === 'SuperAdmin' || role === 'Owner') && executorRole === 'Admin') {
+      return res.status(403).json({ success: false, message: "No puedes asignar un rango superior al tuyo." });
     }
 
-    res.json({
-      success: true,
-      message: 'Rol actualizado en Tabla y Auth Metadata'
-    });
-
+    await updateUserRole(id, role);
+    res.json({ success: true, message: 'Rol actualizado en todo el sistema' });
   } catch (error: any) {
-    console.error("❌ Error:", error.message);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// DELETE /api/profiles/:id
-// Solo un Admin o superior puede borrar, pero añadiremos una protección extra
-router.delete('/profiles/:id', hasRole('Admin'), async (req: any, res: Response) => {
+// DELETE /api/profiles/:id - Eliminación completa
+router.delete('/profiles/:id', verifySession, hasRole('Admin'), async (req: any, res: Response) => {
   const { id } = req.params;
   const executorRole = req.user.role;
 
   try {
-    // Protección: Un 'Admin' no puede borrar a un 'SuperAdmin' o 'Owner'
     const { data: targetUser } = await supabase.from('users').select('role').eq('id', id).single();
 
     if (targetUser && (targetUser.role === 'Owner' || targetUser.role === 'SuperAdmin')) {
       if (executorRole === 'Admin') {
-        return res.status(403).json({ message: "No tienes nivel suficiente para borrar a este usuario." });
+        return res.status(403).json({ message: "No puedes borrar a un superior." });
       }
     }
 
-    // 1. Eliminar de la tabla pública
-    const { error: tableError } = await supabase.from('users').delete().eq('id', id);
-    if (tableError) throw tableError;
+    // Borramos de la tabla pública
+    await supabase.from('users').delete().eq('id', id);
+    // Borramos de Auth usando el cliente Admin
+    await supabaseAdmin.auth.admin.deleteUser(id);
 
-    // 2. Eliminar de Supabase Auth
-    const { error: authError } = await supabase.auth.admin.deleteUser(id);
-    if (authError) console.warn("⚠️ Usuario borrado de tabla pero no de Auth");
-
-    res.json({ success: true, message: 'Usuario eliminado correctamente' });
+    res.json({ success: true, message: 'Usuario eliminado permanentemente' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
 /* =================================================
-   RUTAS DE INFORMACIÓN Y ADMIN
+   3. INFORMACIÓN DE USUARIO Y AUDITORÍA
 ================================================= */
 
-// GET /api/perfil - Datos del usuario logueado
-router.get('/perfil', verifySession, hasRole('Viewer'), (req: any, res: Response) => {
-  res.json({
-    success: true,
-    user: req.user,
-  });
+router.get('/perfil', verifySession, (req: any, res: Response) => {
+  res.json({ success: true, user: req.user });
 });
 
-// GET /api/admin/all-users
-// Ahora, gracias al nuevo middleware, si eres SuperAdmin u Owner pasarás aunque pida 'Admin'
-// GET /api/admin/all-users
+/* =================================================
+   4. TODOS LOS CLIENTES DE SUPABASE
+================================================= */
+
 router.get('/admin/all-users', verifySession, hasRole('Admin'), async (req, res) => {
   try {
-    // Usamos la función del servicio que ya tiene lógica de supabaseAdmin
     const users = await getAllUsersFromAuth();
+    res.json({ success: true, data: users });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: "Error al obtener usuarios de Auth" });
+  }
+});
 
-    res.json({ 
-      success: true, 
-      data: users 
+/* =================================================
+   5. CERRAR SESIÓN (LOGOUT)
+================================================= */
+
+// El frontend llama a /api/logout (asumiendo que el prefijo en app.ts es /api)
+router.post('/logout', (req: Request, res: Response) => {
+  try {
+    console.log("🔐 Cerrando sesión y limpiando cookies...");
+    
+    // Función que ya tienes importada para limpiar cookies del navegador
+    clearAuthCookies(res);
+
+    return res.json({
+      success: true,
+      message: 'Sesión cerrada correctamente en el servidor'
     });
   } catch (error: any) {
-    console.error("Error en la ruta admin:", error.message);
-    res.status(500).json({ 
-      success: false, 
-      error: "Error interno al obtener usuarios" 
+    console.error("❌ Error en logout:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Error al cerrar sesión'
     });
   }
 });

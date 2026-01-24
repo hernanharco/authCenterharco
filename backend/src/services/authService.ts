@@ -1,129 +1,187 @@
-import 'dotenv/config';
-import { createClient } from '@supabase/supabase-js';
-import { JwtPayload } from 'jsonwebtoken';
-import { Response } from 'express';
+import "dotenv/config";
+import { createClient } from "@supabase/supabase-js";
+import { Response } from "express";
+import { AuthenticatedUser } from "@/types/authTypes";
+import { UserRole } from "@/types/permissionTypes";
+
+// * =================================================
+//    CLIENTES SUPABASE (SDK CONFIGURATION)
+// ================================================= *//
+
+const supabaseUrl = process.env.SUPABASE_URL as string;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY as string;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 /* =================================================
-   1. CONFIGURACIÓN DE CLIENTES (SDK)
+   VALIDACIÓN DE TOKENS (STATELESS VERIFICATION)
 ================================================= */
 
 /**
- * Cliente Estándar: Se usa para operaciones de usuario (login, perfil, refresh).
- * Utiliza la ANON_KEY, respetando las políticas de seguridad (RLS).
+ * ✅ VERSIÓN CORREGIDA
+ * Valida un JWT de Supabase creando un cliente temporal con el token.
+ * Esto resuelve el error "Auth session missing!"
  */
-export const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL as string,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
-);
+export const verifySupabaseToken = async (token: string): Promise<AuthenticatedUser> => {
+  console.log("🛠️ URL de Supabase en uso:", process.env.SUPABASE_URL);
 
-/**
- * Cliente Maestro (Admin): SE USA SOLO EN EL BACKEND.
- * Utiliza la SERVICE_ROLE_KEY para saltar el RLS y acceder a esquemas protegidos como 'auth'.
- */
-export const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL as string,
-  process.env.SUPABASE_SERVICE_ROLE_KEY as string 
-);
+  try {
+    // MÉTODO CORRECTO: Crear un cliente temporal con el token específico
+    const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    });
 
-export interface SupabaseJwtPayload extends JwtPayload {
-  sub: string;
-  email?: string;
-  role?: string;
-}
+    // Ahora getUser() usará el token del header
+    const { data: { user }, error } = await tempClient.auth.getUser();
 
-/* =================================================
-   2. SEGURIDAD Y VALIDACIÓN DE TOKENS
-================================================= */
+    if (error) {
+      console.error("❌ Error de Validación de Supabase:", {
+        message: error.message,
+        status: error.status
+      });
+      throw error;
+    }
 
-/**
- * Verifica si un token JWT es válido consultando directamente a Supabase.
- * Es más seguro que 'jsonwebtoken' local porque valida contra el estado real de la sesión.
- */
-export async function verifySupabaseToken(token: string): Promise<SupabaseJwtPayload> {
-  if (!token) throw new Error('Token no proporcionado');
+    if (!user) {
+      throw new Error("Usuario no encontrado en el token");
+    }
 
-  const { data: { user }, error } = await supabase.auth.getUser(token);
+    // Obtener el rol desde la tabla users (más confiable que app_metadata)
+    const { data: profile, error: profileError } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .single();
 
-  if (error || !user) {
-    console.error("❌ [AuthService] Error de validación Supabase:", error?.message);
-    throw new Error(error?.message || 'Token inválido o expirado');
+    if (profileError) {
+      console.warn("⚠️ No se pudo obtener perfil desde DB, usando metadata");
+    }
+
+    const userRole = profile?.role || (user.app_metadata?.role as UserRole) || 'Viewer';
+
+    console.log("✅ Token validado correctamente para:", user.email, "| Rol:", userRole);
+
+    return {
+      sub: user.id,
+      email: user.email!,
+      role: userRole
+    };
+  } catch (error: any) {
+    console.error("🔴 Fallo completo en verifySupabaseToken:", error.message);
+    throw error;
   }
-
-  return {
-    sub: user.id,
-    email: user.email,
-    role: (user.app_metadata?.role as string) || 'authenticated'
-  } as SupabaseJwtPayload;
-}
-
-/**
- * Obtiene el rol específico de un usuario desde la tabla 'public.users'.
- * Utilizado para control de acceso (RBAC) en rutas protegidas.
- */
-export async function getUserRole(userId: string): Promise<string> {
-  if (!userId) return "unauthenticated";
-  
-  const { data, error } = await supabase
-    .from("users")
-    .select("role")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (error) console.warn("⚠️ [AuthService] No se pudo obtener el rol:", error.message);
-  return data?.role || "authenticated";
-}
+};
 
 /* =================================================
-   3. GESTIÓN DE COOKIES (MIDDLEWARE DE SESIÓN)
+   GESTIÓN DE COOKIES (HTTP-ONLY SECURITY)
 ================================================= */
 
-/**
- * Configura cookies HttpOnly seguras en el navegador.
- * HttpOnly evita que el JS del frontend acceda al token (Protección anti-XSS).
- */
-export function setAuthCookie(res: Response, token: string, name: "authToken" | "refreshToken") {
+export function setAuthCookie(
+  res: Response,
+  token: string,
+  name: "authToken" | "refreshToken"
+) {
+  const isProd = process.env.NODE_ENV === "production";
+
   res.cookie(name, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production", // Solo HTTPS en producción
-    sameSite: "lax",
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
     path: "/",
-    // El Refresh Token dura 7 días, el Auth Token 1 hora
-    maxAge: name === "refreshToken" ? 604800000 : 3600000,
+    maxAge: name === "refreshToken" ? 604800000 : 3600000
   });
 }
 
-/**
- * Elimina las cookies de sesión del navegador (Logout).
- */
 export function clearAuthCookies(res: Response) {
-  const options = { httpOnly: true, expires: new Date(0), path: "/", sameSite: "lax" as const };
+  const isProd = process.env.NODE_ENV === "production";
+  const options = {
+    httpOnly: true,
+    expires: new Date(0),
+    path: "/",
+    sameSite: (isProd ? "none" : "lax") as any,
+    secure: isProd
+  };
   res.cookie("authToken", "", options);
   res.cookie("refreshToken", "", options);
 }
 
-/**
- * Solicita a Supabase un nuevo token de acceso usando el token de refresco.
- */
+/* =================================================
+   REFRESCO DE SESIÓN (SILENT REFRESH LOGIC)
+================================================= */
+
 export async function refreshAuthToken(refreshToken: string) {
-  const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
-  if (error || !data.session) throw new Error("No se pudo renovar la sesión");
-  return data.session;
+  try {
+    const { data, error } = await supabase.auth.refreshSession({
+      refresh_token: refreshToken
+    });
+
+    if (error || !data.session) {
+      console.error("❌ Error en refresh:", error?.message);
+      throw new Error("No se pudo renovar la sesión");
+    }
+
+    console.log("🔄 Sesión refrescada exitosamente");
+    return data.session;
+  } catch (error: any) {
+    console.error("🔴 Fallo en refreshAuthToken:", error.message);
+    throw error;
+  }
 }
 
 /* =================================================
-   4. ADMINISTRACIÓN DE DATOS (CRUD GLOBAL)
+   ADMINISTRACIÓN (USER MANAGEMENT)
 ================================================= */
 
-/**
- * Lista TODOS los usuarios registrados en el sistema de autenticación de Supabase.
- * Fuente: Esquema Interno (auth.users). Requiere supabaseAdmin.
- */
 export const getAllUsersFromAuth = async () => {
   const { data, error } = await supabaseAdmin.auth.admin.listUsers();
-  
+
   if (error) {
-    console.error("❌ [AuthService] Error en getAllUsersFromAuth:", error.message);
     throw error;
   }
+
   return data.users;
 };
+
+/**
+ * ACTUALIZACIÓN DE ROLES (SYNC AUTH + PUBLIC TABLE)
+ */
+export async function updateUserRole(userId: string, newRole: UserRole) {
+  try {
+    // 1. Actualizar en la tabla users
+    const { error: dbError } = await supabase
+      .from("users")
+      .update({ 
+        role: newRole, 
+        updated_at: new Date().toISOString() 
+      })
+      .eq("id", userId);
+
+    if (dbError) throw new Error(`Error en DB: ${dbError.message}`);
+
+    // 2. Actualizar en Auth metadata
+    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+      userId,
+      { 
+        app_metadata: { role: newRole },
+        user_metadata: { role: newRole }
+      }
+    );
+
+    if (authError) {
+      console.warn("⚠️ Falló Auth, pero DB actualizada");
+      throw new Error(`Error en Auth: ${authError.message}`);
+    }
+
+    console.log("✅ Rol actualizado correctamente:", newRole);
+    return { success: true };
+  } catch (error: any) {
+    console.error("❌ Fallo en actualización de rol:", error.message);
+    throw error;
+  }
+}

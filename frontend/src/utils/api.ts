@@ -1,80 +1,71 @@
-// frontend/src/utils/api.ts
 import { ApiResponse } from '@/types/api';
 
 /**
  * URL base del backend de Express.
- * Se obtiene de las variables de entorno o usa el puerto 4000 por defecto.
+ * Sincronizado con tu configuración de Linux/Neon.
  */
 const EXPRESS_URL = (process.env.NEXT_PUBLIC_EXPRESS_URL || 'http://localhost:4000/api').replace(/\/$/, '');
 
 /**
- * Función genérica para hacer llamadas a la API de Express con soporte para TypeScript.
- * * @template T - Tipo esperado de la respuesta (por defecto ApiResponse)
- * @param {string} endpoint - La ruta del recurso (ej: '/auth/login' o '/profiles')
- * @param {RequestInit} options - Opciones nativas de fetch (method, body, headers, etc.)
- * @returns {Promise<T>} - Promesa con los datos tipados de la respuesta
+ * Función genérica para llamadas a la API con soporte para cookies HttpOnly.
  */
 export async function fetchApi<T = ApiResponse>(
   endpoint: string, 
   options: RequestInit = {}
 ): Promise<T> {
     
-    // Normalización del endpoint: asegurar que empiece con /
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     
+    // Configuración base optimizada para tu arquitectura SaaS
+    const defaultHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+    };
+
     const defaultOptions: RequestInit = {
         method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        // CRÍTICO: 'include' asegura que las cookies (como el JWT) se envíen automáticamente.
-        // Esencial para que el backend reconozca tu sesión de Admin en Neon.
-        credentials: 'include', 
+        credentials: 'include', // 🚨 Obligatorio para enviar authToken y refreshToken
         ...options,
+        headers: {
+            ...defaultHeaders,
+            ...options.headers,
+        },
     };
     
-    // Si el body es un objeto, lo convertimos automáticamente a JSON string
-    if (options.body && typeof options.body !== 'string') {
+    if (options.body && typeof options.body !== 'string' && !(options.body instanceof FormData)) {
         defaultOptions.body = JSON.stringify(options.body);
     }
 
     try {
         const response = await fetch(`${EXPRESS_URL}${cleanEndpoint}`, defaultOptions);
 
-        // 1. Manejo de Sesión Expirada (401/403)
-        if (response.status === 401 || response.status === 403) {
-            console.warn('⚠️ Sesión expirada o permisos insuficientes. Redirigiendo...');
-            if (typeof window !== 'undefined') {
-                window.location.href = '/login';
+        // 1. Manejo de Autorización (401/403)
+        if (response.status === 401) {
+            console.warn('⚠️ Sesión expirada. Intentando flujo de recuperación...');
+            if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+                // Solo redirigimos si no estamos ya en el login para evitar bucles
+                window.location.href = '/login?reason=expired';
             }
-            throw new Error('Sesión expirada o no autorizada.'); 
+            throw new Error('Sesión expirada'); 
         }
 
-        // 2. Manejo de Errores del Servidor (4xx, 5xx)
+        // 2. Manejo de Errores del Servidor
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ 
-                message: `Error del servidor (${response.status})` 
+                message: `Error ${response.status}: ${response.statusText}` 
             }));
 
-            // Log detallado para desarrollo en Linux
             console.error(`🔴 API Error [${response.status}] en ${cleanEndpoint}:`, errorData);
-
             throw new Error(errorData.message || errorData.error || `Error ${response.status}`);
         }
 
         // 3. Respuesta Exitosa
-        const data = await response.json();
-        return data as T;
+        return await response.json() as T;
 
     } catch (error: any) {
-        // Manejo de errores de red (Server offline o CORS)
-        if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
-            console.error('❌ Error de conexión: El servidor Express no responde.');
-            throw new Error('No se pudo establecer conexión con el servidor.');
+        if (error.name === 'TypeError' && error.message.includes('fetch')) {
+            console.error('❌ El servidor Express en Linux no responde. ¿Está corriendo pnpm dev?');
+            throw new Error('Servidor fuera de línea.');
         }
-        
-        // Re-lanzar el error para que el componente (Dashboard) pueda manejarlo
         throw error;
     }    
 }
-

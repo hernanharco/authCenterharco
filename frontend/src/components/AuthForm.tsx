@@ -42,7 +42,6 @@ const AuthForm: React.FC = () => {
           password,
         });
       } else {
-        // Inyectamos el ROL solo en el registro
         authResponse = await supabase.auth.signUp({
           email,
           password,
@@ -57,13 +56,12 @@ const AuthForm: React.FC = () => {
 
       if (authResponse.error) throw authResponse.error;
 
-      // Obtenemos la sesión real de la respuesta de Supabase
       const session = authResponse.data.session;
 
       if (session) {
-        // --- PASO 2: PERSISTENCIA (COOKIES) ---
-        // Usamos 'as any' para el body para evitar el error de ReadableStream de TS
-        await fetchApi('/api/set-cookie', {
+        // --- PASO 2: PERSISTENCIA EN TU BACKEND (PUERTO 4000) ---
+        // Esto genera tus cookies HttpOnly seguras.
+        await fetchApi('/set-cookie', {
           method: 'POST',
           body: {
             access_token: session.access_token,
@@ -71,23 +69,27 @@ const AuthForm: React.FC = () => {
           } as any,
         });
 
-        // --- PASO 3: CIERRE O REDIRECCIÓN (POPUP CONTROL) ---
-        // --- PASO 3: CIERRE O REDIRECCIÓN (POPUP CONTROL) ---
+        // 🚨 PASO 3: LIMPIEZA DE SESIÓN LOCAL (SUPABASE FRONTEND)
+        // Cerramos la sesión en el cliente de Supabase inmediatamente.
+        // Esto borra las cookies automáticas (sb-...) y deja solo tu authToken.
+        await supabase.auth.signOut();
+
+        // --- PASO 4: CIERRE O REDIRECCIÓN (POPUP CONTROL) ---
         if (window.opener) {
           const userRole = session.user?.user_metadata?.role || 'Viewer';
+          const userName = session.user?.user_metadata?.full_name || 'Usuario';
 
-          // 🚨 ACTUALIZACIÓN: Enviamos el payload completo como en el Callback
           window.opener.postMessage({
             type: 'auth:success',
             payload: {
-              accessToken: session.access_token,
-              refreshToken: session.refresh_token,
+              name: userName, // Enviamos el nombre para que el Header lo vea rápido
               role: userRole
             }
-          }, "*"); // O el origin específico si ya lo tienes validado
+          }, "*");
 
-          window.opener.location.reload();
           window.close();
+        } else {
+          router.push("/dashboard");
         }
       }
     } catch (err) {
