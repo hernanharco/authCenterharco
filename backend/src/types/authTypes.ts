@@ -1,5 +1,5 @@
 // src/types/authTypes.ts
-import { UserRole } from "@/types/permissionTypes";
+import { UserRole } from "./permissionTypes";
 
 export interface AuthenticatedUser {
   sub: string;

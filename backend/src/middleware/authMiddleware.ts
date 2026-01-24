@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
-import { verifySupabaseToken } from "@/services/authService";
-import { UserRole, checkLevel } from "@/types/permissionTypes";
-import { AuthenticatedUser } from "@/types/authTypes";
+import { verifySupabaseToken } from "../services/authService";
+import { UserRole, checkLevel } from "../types/permissionTypes";
+import { AuthenticatedUser } from "../types/authTypes";
 
 interface AuthRequest extends Request {
   user?: AuthenticatedUser;
@@ -22,8 +22,8 @@ export const verifySession = async (
   console.log("🔍 Verificando sesión - Cookie presente:", !!token);
 
   if (!token) {
-    return res.status(401).json({ 
-      success: false, 
+    return res.status(401).json({
+      success: false,
       message: "No autenticado - Se requiere login",
       requiresLogin: true
     });
@@ -34,10 +34,10 @@ export const verifySession = async (
     req.user = await verifySupabaseToken(token);
     console.log("✅ Sesión válida para:", req.user.email);
     return next();
-    
+
   } catch (error: any) {
     console.warn(`⚠️ Token inválido o expirado: ${error.message}`);
-    
+
     return res.status(401).json({
       success: false,
       message: "Sesión expirada - Vuelve a iniciar sesión",

@@ -1,11 +1,9 @@
 #!/bin/bash
 
-# AuthCenterharco Setup Script
-# Este script configura el entorno de desarrollo para el proyecto
+# Script de configuración y despliegue para authCenterharco
+# Este script configura el entorno y levanta los contenedores Docker
 
 set -e
-
-echo "🚀 Configurando AuthCenterharco..."
 
 # Colores para output
 RED='\033[0;31m'
@@ -14,247 +12,265 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Función para imprimir mensajes coloreados
-print_message() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+# Funciones de logging
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
 }
 
-print_warning() {
+log_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+log_warning() {
     echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
-print_error() {
+log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-print_step() {
-    echo -e "${BLUE}[STEP]${NC} $1"
+log_step() {
+    echo -e "${YELLOW}[STEP]${NC} $1"
 }
 
-# Verificar si Node.js está instalado
-check_node() {
-    print_step "Verificando Node.js..."
-    if ! command -v node &> /dev/null; then
-        print_error "Node.js no está instalado. Por favor instala Node.js 18+ desde https://nodejs.org"
-        exit 1
-    fi
-    
-    NODE_VERSION=$(node -v | cut -d'v' -f2)
-    REQUIRED_VERSION="18.0.0"
-    
-    if [ "$(printf '%s\n' "$REQUIRED_VERSION" "$NODE_VERSION" | sort -V | head -n1)" != "$REQUIRED_VERSION" ]; then
-        print_error "Se requiere Node.js 18+. Versión actual: $NODE_VERSION"
-        exit 1
-    fi
-    
-    print_message "✅ Node.js $NODE_VERSION encontrado"
-}
-
-# Verificar si npm está instalado
-check_npm() {
-    print_step "Verificando npm..."
-    if ! command -v npm &> /dev/null; then
-        print_error "npm no está instalado"
-        exit 1
-    fi
-    
-    NPM_VERSION=$(npm -v)
-    print_message "✅ npm $NPM_VERSION encontrado"
-}
-
-# Instalar dependencias del backend
-install_backend_deps() {
-    print_step "Instalando dependencias del backend..."
-    cd backend
-    
-    if [ -f "package-lock.json" ]; then
-        npm ci
-    else
-        npm install
-    fi
-    
-    cd ..
-    print_message "✅ Dependencias del backend instaladas"
-}
-
-# Instalar dependencias del frontend
-install_frontend_deps() {
-    print_step "Instalando dependencias del frontend..."
-    cd frontend
-    
-    if [ -f "package-lock.json" ]; then
-        npm ci
-    else
-        npm install
-    fi
-    
-    cd ..
-    print_message "✅ Dependencias del frontend instaladas"
-}
-
-# Crear archivo .env si no existe
-setup_env() {
-    print_step "Configurando variables de entorno..."
-    
-    if [ ! -f ".env" ]; then
-        if [ -f ".env.example" ]; then
-            cp .env.example .env
-            print_message "✅ Archivo .env creado desde .env.example"
-            print_warning "⚠️  Por favor edita el archivo .env con tus credenciales de Supabase"
-        else
-            print_warning "⚠️  No se encontró .env.example. Creando archivo .env básico..."
-            cat > .env << EOF
-# Supabase Configuration
-SUPABASE_URL=tu_supabase_url
-SUPABASE_ANON_KEY=tu_supabase_anon_key
-SUPABASE_SERVICE_ROLE_KEY=tu_supabase_service_role_key
-
-# JWT Configuration
-JWT_SECRET=tu_jwt_secreto
-
-# Server Configuration
-PORT=4000
-NODE_ENV=development
-
-# Frontend URL (para CORS)
-FRONTEND_URL=http://localhost:3000
-EOF
-            print_message "✅ Archivo .env creado"
-            print_warning "⚠️  Por favor edita el archivo .env con tus credenciales reales"
+# Verificar si se está ejecutando como root
+check_root() {
+    if [[ $EUID -eq 0 ]]; then
+        log_warning "No se recomienda ejecutar este script como root"
+        read -p "¿Desea continuar? (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
         fi
+    fi
+}
+
+# Verificar dependencias del sistema
+check_dependencies() {
+    log_step "Verificando dependencias del sistema..."
+    
+    # Verificar Docker
+    if ! command -v docker &> /dev/null; then
+        log_error "Docker no está instalado. Por favor instale Docker primero."
+        exit 1
+    fi
+    log_success "Docker encontrado: $(docker --version)"
+    
+    # Verificar Docker Compose
+    if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+        log_error "Docker Compose no está instalado. Por favor instale Docker Compose primero."
+        exit 1
+    fi
+    
+    if command -v docker-compose &> /dev/null; then
+        log_success "Docker Compose encontrado: $(docker-compose --version)"
+        COMPOSE_CMD="docker-compose"
     else
-        print_message "✅ Archivo .env ya existe"
+        log_success "Docker Compose encontrado: $(docker compose version)"
+        COMPOSE_CMD="docker compose"
+    fi
+    
+    # Verificar pnpm
+    if ! command -v pnpm &> /dev/null; then
+        log_warning "pnpm no está instalado localmente. Los contenedores usarán pnpm instalado en Docker."
+    else
+        log_success "pnpm encontrado: $(pnpm --version)"
     fi
 }
 
 # Verificar estructura del proyecto
-check_structure() {
-    print_step "Verificando estructura del proyecto..."
+check_project_structure() {
+    log_step "Verificando estructura del proyecto..."
     
-    required_dirs=("backend" "frontend")
-    for dir in "${required_dirs[@]}"; do
-        if [ ! -d "$dir" ]; then
-            print_error "Directorio requerido '$dir' no encontrado"
-            exit 1
-        fi
-    done
+    required_files=(
+        "docker-compose.yml"
+        "backend/Dockerfile"
+        "frontend/Dockerfile"
+        "backend/package.json"
+        "frontend/package.json"
+        "backend/pnpm-lock.yaml"
+        "frontend/pnpm-lock.yaml"
+    )
     
-    required_files=("backend/package.json" "frontend/package.json")
     for file in "${required_files[@]}"; do
-        if [ ! -f "$file" ]; then
-            print_error "Archivo requerido '$file' no encontrado"
+        if [[ ! -f "$file" ]]; then
+            log_error "Archivo requerido no encontrado: $file"
             exit 1
         fi
     done
     
-    print_message "✅ Estructura del proyecto verificada"
+    log_success "Estructura del proyecto verificada"
 }
 
-# Construir el backend
-build_backend() {
-    print_step "Construyendo el backend..."
-    cd backend
-    npm run build
-    cd ..
-    print_message "✅ Backend construido exitosamente"
-}
-
-# Construir el frontend
-build_frontend() {
-    print_step "Construyendo el frontend..."
-    cd frontend
-    npm run build
-    cd ..
-    print_message "✅ Frontend construido exitosamente"
-}
-
-# Construir con Docker
-build_docker() {
-    print_step "Construyendo imágenes Docker..."
+# Verificar archivo .env
+check_env_file() {
+    log_step "Verificando archivo de entorno..."
     
-    # Verificar si Docker está instalado
-    if ! command -v docker &> /dev/null; then
-        print_error "Docker no está instalado. Por favor instala Docker desde https://docker.com"
+    if [[ ! -f ".env" ]]; then
+        log_warning "Archivo .env no encontrado"
+        if [[ -f ".env.example" ]]; then
+            log_info "Copiando .env.example a .env"
+            cp .env.example .env
+            log_warning "Por favor configure las variables de entorno en el archivo .env"
+        else
+            log_error "No se encontró .env.example. Por favor cree un archivo .env con las variables necesarias."
+            exit 1
+        fi
+    else
+        log_success "Archivo .env encontrado"
+    fi
+}
+
+# Limpiar contenedores y volúmenes anteriores (opcional)
+cleanup() {
+    log_step "Limpiando contenedores anteriores..."
+    
+    # Detener y remover contenedores
+    $COMPOSE_CMD down --remove-orphans 2>/dev/null || true
+    
+    # Preguntar si se desea limpiar volúmenes
+    read -p "¿Desea limpiar también los volúmenes Docker? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        $COMPOSE_CMD down -v 2>/dev/null || true
+        log_info "Volúmenes limpiados"
+    fi
+    
+    # Preguntar si se desea limpiar imágenes
+    read -p "¿Desea limpiar también las imágenes Docker? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        $COMPOSE_CMD down --rmi all 2>/dev/null || true
+        log_info "Imágenes limpiadas"
+    fi
+    
+    log_success "Limpieza completada"
+}
+
+# Construir y levantar contenedores
+build_and_deploy() {
+    log_step "Construyendo y levantando contenedores..."
+    
+    # Construir imágenes
+    log_info "Construyendo imágenes Docker..."
+    $COMPOSE_CMD build --no-cache
+    
+    # Levantar servicios
+    log_info "Levantando servicios..."
+    $COMPOSE_CMD up -d
+    
+    log_success "Servicios levantados"
+}
+
+# Verificar estado de los servicios
+check_services() {
+    log_step "Verificando estado de los servicios..."
+    
+    # Esperar un momento para que los servicios inicien
+    sleep 10
+    
+    # Verificar estado de los contenedores
+    if $COMPOSE_CMD ps | grep -q "Up"; then
+        log_success "Contenedores están corriendo"
+        $COMPOSE_CMD ps
+    else
+        log_error "Algunos contenedores no están corriendo correctamente"
+        $COMPOSE_CMD ps
+        $COMPOSE_CMD logs --tail=20
         exit 1
     fi
     
-    if ! command -v docker-compose &> /dev/null; then
-        print_error "Docker Compose no está instalado. Por favor instala Docker Compose"
-        exit 1
+    # Verificar health checks
+    log_info "Esperando health checks..."
+    sleep 30
+    
+    if $COMPOSE_CMD ps | grep -q "healthy"; then
+        log_success "Servicios saludables"
+    else
+        log_warning "Algunos servicios podrían no estar completamente listos"
+        $COMPOSE_CMD ps
     fi
-    
-    # Construir y levantar contenedores
-    docker-compose build
-    docker-compose up -d
-    
-    print_message "✅ Contenedores Docker construidos e iniciados"
 }
 
-# Mostrar comandos de inicio
-show_start_commands() {
-    print_message "🎉 ¡Configuración completada!"
-    echo ""
-    echo -e "${BLUE}Opciones de ejecución:${NC}"
-    echo ""
-    echo "1. Modo Desarrollo (Recomendado para desarrollo):"
-    echo "   Terminal 1 (Backend):"
-    echo "     cd backend && npm run dev"
-    echo "   Terminal 2 (Frontend):"
-    echo "     cd frontend && npm run dev"
-    echo ""
-    echo "2. Docker (Producción):"
-    echo "   docker-compose up -d"
-    echo "   docker-compose logs -f  # Ver logs"
-    echo "   docker-compose down     # Detener"
-    echo ""
-    echo -e "${BLUE}Accesos:${NC}"
-    echo "  Frontend: http://localhost:3000"
-    echo "  Backend:  http://localhost:4000"
-    echo "  API Docs: http://localhost:4000/api"
-    echo ""
-    print_warning "⚠️  Asegúrate de haber configurado tus credenciales en el archivo .env"
+# Mostrar información de acceso
+show_access_info() {
+    log_step "Información de acceso:"
+    echo
+    echo "🌐 Frontend: http://localhost:3000"
+    echo "🔧 Backend API: http://localhost:4000"
+    echo
+    echo "Comandos útiles:"
+    echo "  Ver logs: $COMPOSE_CMD logs -f"
+    echo "  Detener servicios: $COMPOSE_CMD down"
+    echo "  Reiniciar servicios: $COMPOSE_CMD restart"
+    echo
+    echo "Para ver los logs de un servicio específico:"
+    echo "  Frontend: $COMPOSE_CMD logs -f frontend"
+    echo "  Backend: $COMPOSE_CMD logs -f backend"
+    echo
 }
 
 # Función principal
 main() {
-    echo "========================================"
-    echo "    AuthCenterharco Setup Script      "
-    echo "========================================"
-    echo ""
-    
-    # Verificar prerequisitos
-    check_node
-    check_npm
-    check_structure
-    
-    # Instalar dependencias
-    install_backend_deps
-    install_frontend_deps
-    
-    # Configurar entorno
-    setup_env
-    
-    # Construir proyectos
-    build_backend
-    build_frontend
-    
-    # Preguntar si quiere usar Docker
-    echo ""
-    read -p "¿Quieres construir y levantar los contenedores Docker? (y/N): " -n 1 -r
+    echo "🚀 Script de configuración para authCenterharco"
+    echo "============================================"
     echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        build_docker
+    
+    # Parsear argumentos
+    CLEANUP=false
+    SKIP_DEPS=false
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --cleanup)
+                CLEANUP=true
+                shift
+                ;;
+            --skip-deps)
+                SKIP_DEPS=true
+                shift
+                ;;
+            --help|-h)
+                echo "Uso: $0 [OPCIONES]"
+                echo
+                echo "Opciones:"
+                echo "  --cleanup    Limpia contenedores, volúmenes e imágenes anteriores"
+                echo "  --skip-deps  Omite la verificación de dependencias del sistema"
+                echo "  --help, -h   Muestra esta ayuda"
+                echo
+                exit 0
+                ;;
+            *)
+                log_error "Opción desconocida: $1"
+                echo "Use --help para ver las opciones disponibles"
+                exit 1
+                ;;
+        esac
+    done
+    
+    # Ejecutar pasos
+    check_root
+    
+    if [[ "$SKIP_DEPS" == false ]]; then
+        check_dependencies
     fi
     
-    # Mostrar comandos de inicio
-    show_start_commands
+    check_project_structure
+    check_env_file
     
-    echo ""
-    print_message "✨ ¡Listo para empezar a desarrollar! ✨"
+    if [[ "$CLEANUP" == true ]]; then
+        cleanup
+    fi
+    
+    build_and_deploy
+    check_services
+    show_access_info
+    
+    log_success "🎉 Configuración completada exitosamente!"
 }
 
-# Manejar interrupción
-trap 'print_error "Setup interrumpido"; exit 1' INT
+# Capturar interrupciones
+trap 'log_error "Setup interrumpido"; exit 1' INT TERM
 
-# Ejecutar script
+# Ejecutar función principal
 main "$@"

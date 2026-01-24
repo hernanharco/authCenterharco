@@ -1,44 +1,58 @@
-# Frontend Dockerfile
-FROM node:18-alpine AS base
+# 1. Base: Usamos Node 20 para cumplir con los requisitos de Next.js [Versión LTS]
+FROM node:20-alpine AS base
 
-# Install dependencies only when needed
+# Instalamos pnpm globalmente de forma eficiente
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# 2. Deps: Instalamos dependencias
 FROM base AS deps
-RUN apk add --no-cache libc6-compat curl
+# libc6-compat es necesario para algunas librerías nativas en Alpine
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-RUN npm ci
+# Copiamos los archivos de definición de paquetes
+COPY package.json pnpm-lock.yaml ./
+# Instalamos dependencias ignorando scripts de post-instalación para mayor seguridad
+RUN pnpm install --frozen-lockfile
 
-# Rebuild the source code only when needed
+# 3. Builder: Compilamos la aplicación
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build the application
-RUN npm run build
+# Desactivamos la telemetría de Next.js durante el build
+ENV NEXT_TELEMETRY_DISABLED 1
 
-# Production image
+RUN pnpm run build
+
+# 4. Runner: Imagen final de producción
 FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV production
+ENV NEXT_TELEMETRY_DISABLED 1
 
-# Don't run production as root
+# Seguridad: No ejecutar como root
 RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
 
-# Copy the built application
-COPY --from=builder --chown=nodejs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nodejs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nodejs:nodejs /app/public ./public
+# Copiamos archivos necesarios del modo standalone
+# Importante: next.config.js debe tener output: 'standalone'
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-USER nodejs
+USER nextjs
 
 EXPOSE 3000
 
+ENV PORT 3000
+ENV HOSTNAME "0.0.0.0"
+
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3000/ || exit 1
+  CMD node -e "require('http').get('http://localhost:3000/', (res) => res.statusCode === 200 ? process.exit(0) : process.exit(1))"
 
 CMD ["node", "server.js"]

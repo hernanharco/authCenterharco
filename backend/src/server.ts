@@ -2,9 +2,9 @@ import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import authRoutes from "@/routes/authRoutes";
-import { corsOptions } from "@/config/corsConfig";
-import { initEnvValidation } from "@/utils/validateEnv"; // ⬅️ NUEVO
+import authRoutes from "./routes/authRoutes";
+import { corsOptions } from "./config/corsConfig";
+import { initEnvValidation } from "./utils/validateEnv"; // ⬅️ NUEVO
 
 // ⚡ VALIDAR VARIABLES DE ENTORNO ANTES DE INICIAR
 initEnvValidation();
@@ -20,7 +20,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 // 3. REGISTRO DE RUTAS
-app.use("/api", authRoutes); 
+app.use("/api", authRoutes);
 
 // Ruta base de salud
 app.get("/", (req: Request, res: Response) => {
@@ -29,8 +29,8 @@ app.get("/", (req: Request, res: Response) => {
 
 // 4. MANEJO DE RUTAS NO ENCONTRADAS
 app.use((req: Request, res: Response) => {
-  res.status(404).json({ 
-    message: `La ruta ${req.originalUrl} no existe.` 
+  res.status(404).json({
+    message: `La ruta ${req.originalUrl} no existe.`
   });
 });
 
@@ -42,8 +42,8 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   console.error(`\x1b[31m[ERROR] ${req.method} ${req.url}\x1b[0m`);
   console.error(err.stack);
 
-  res.status(status).json({ 
-    success: false, 
+  res.status(status).json({
+    success: false,
     message,
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack, details: err })
   });
