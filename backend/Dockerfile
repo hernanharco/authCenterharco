@@ -1,48 +1,47 @@
-# Backend Dockerfile
+# --- ETAPA BASE ---
 FROM node:18-alpine AS base
-
-# Install pnpm globalmente
 RUN npm install -g pnpm
 
-# --- STAGE 1: Dependencias de Desarrollo ---
-FROM base AS deps
-RUN apk add --no-cache libc6-compat
-WORKDIR /app
-
-COPY package.json pnpm-lock.yaml ./
-# 🔑 QUITAMOS --prod aquí para que instale TypeScript y podamos compilar
-RUN pnpm install --dev --no-frozen-lockfile
-
-# --- STAGE 2: Builder ---
+# --- ETAPA DE COMPILACIÓN (BUILDER) ---
 FROM base AS builder
 WORKDIR /app
-# Copiamos TODOS los node_modules (incluyendo devDependencies)
-COPY --from=deps /app/node_modules ./node_modules
+
+# Copiamos archivos de definición
+COPY package.json pnpm-lock.yaml ./
+
+# Instalamos TODAS las dependencias (incluyendo devDeps para el build)
+# Usamos --no-frozen-lockfile por si hay discrepancias de versión en el entorno Alpine
+RUN pnpm install --no-frozen-lockfile
+
+# Copiamos el resto del código fuente
 COPY . .
 
-# Ahora 'tsc' sí existe y la compilación tendrá éxito
+# Ejecutamos el build de TypeScript
 RUN pnpm run build
 
-# --- STAGE 3: Dependencias de Producción ---
-# Creamos una etapa limpia solo con lo necesario para ejecutar
+# --- ETAPA DE DEPENDENCIAS DE PRODUCCIÓN ---
 FROM base AS prod-deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
-# 🔑 Aquí SÍ instalamos solo producción para que la imagen final sea ligera
 RUN pnpm install --prod --no-frozen-lockfile
 
-# --- STAGE 4: Runner (Imagen Final) ---
+# --- ETAPA FINAL (RUNNER) ---
 FROM base AS runner
 WORKDIR /app
 
+# Seteamos variables de entorno
 ENV NODE_ENV production
+# Render asigna el PORT automáticamente, pero definimos un default
+ENV PORT 4000 
+
+# Instalamos curl para el Healthcheck
 RUN apk add --no-cache curl
 
-# Seguridad: No correr como root
+# Configuración de seguridad (Usuario no root)
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nodejs
 
-# Copiamos solo lo esencial para el runtime
+# Copiamos solo lo necesario desde las etapas anteriores
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 COPY --from=prod-deps --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
@@ -51,9 +50,9 @@ USER nodejs
 
 EXPOSE 4000
 
-# Modificamos el Healthcheck para ser más tolerantes en el arranque
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-  CMD curl -f http://127.0.0.1:4000/ || exit 1
+# Healthcheck para que Render sepa que el servicio está listo
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD curl -f http://localhost:4000/health || exit 1
 
-# Usamos node directamente para evitar overhead de pnpm en el inicio
+# Ejecución directa con Node para máxima eficiencia
 CMD ["node", "dist/server.js"]

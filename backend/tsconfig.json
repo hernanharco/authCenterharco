@@ -9,15 +9,29 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true,
-    /* --- CONFIGURACIÓN DE TIPOS --- */
-    "types": ["node", "express", "cookie-parser", "jsonwebtoken"],
+    /* --- SOLUCIÓN A ERRORES EN RENDER --- */
+    "skipLibCheck": true, 
+    "typeRoots": [
+      "./node_modules/@types"
+    ],
+    "types": [
+      "node", 
+      "express", 
+      "cookie-parser", 
+      "jsonwebtoken"
+    ],
     /* --- CONFIGURACIÓN DE RUTAS --- */
     "baseUrl": ".", 
     "paths": {
       "@/*": ["src/*"]
     }
   },
-  "include": ["src/**/*", "src/types/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules", 
+    "dist",
+    "**/*.test.ts"
+  ]
 }
