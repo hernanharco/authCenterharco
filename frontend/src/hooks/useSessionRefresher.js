@@ -24,17 +24,10 @@ export function useSessionRefresher() {
                 }
 
             } catch (error) {
-<<<<<<< HEAD
                 console.warn('Fallo de refresco silencioso:', error.message);
                 console.error('Renovación de sesión fallida:', error.message);                
                 // Si el refresh token falla (401), forzamos el logout.
                 //router.push('/'); 
-=======
-                console.error('Renovación de sesión fallida:', error.message);
-                
-                // Si el refresh token falla (401), forzamos el logout.
-                router.push('/'); 
->>>>>>> ecf70a1023dc14ecb200f4d29839e2b82f107d0c
             }
         };
 
