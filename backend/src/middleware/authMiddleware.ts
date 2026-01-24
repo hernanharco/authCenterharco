@@ -1,41 +1,70 @@
-import { Response, NextFunction } from "express";
-import { AuthRequest } from "@/types/authReques";
+import { Request, Response, NextFunction } from "express";
+import { verifySupabaseToken } from "@/services/authService";
+import { UserRole, checkLevel } from "@/types/permissionTypes";
+import { AuthenticatedUser } from "@/types/authTypes";
 
-import { verifySupabaseToken, getUserRole } from "../services/authService";
+interface AuthRequest extends Request {
+  user?: AuthenticatedUser;
+}
 
-export async function authenticateToken(
+/**
+ * ✅ MIDDLEWARE SIMPLIFICADO
+ * Solo valida el access token. Si expira, el usuario debe hacer login de nuevo.
+ * Esto es más simple y seguro que intentar refresh desde el backend.
+ */
+export const verifySession = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
-) {
+) => {
   const token = req.cookies?.authToken;
 
-  if (!token)
-    return res.status(401).json({ message: "No autenticado" });
+  console.log("🔍 Verificando sesión - Cookie presente:", !!token);
+
+  if (!token) {
+    return res.status(401).json({ 
+      success: false, 
+      message: "No autenticado - Se requiere login",
+      requiresLogin: true
+    });
+  }
 
   try {
-    const payload = await verifySupabaseToken(token);
-    const role = await getUserRole(payload.sub);
-
-    req.user = {
-      id: payload.sub,
-      email: payload.email,
-      role,
-    };
-
-    next();
-  } catch (err) {
-    return res.status(401).json({ message: "Token inválido" });
+    // Validar el token
+    req.user = await verifySupabaseToken(token);
+    console.log("✅ Sesión válida para:", req.user.email);
+    return next();
+    
+  } catch (error: any) {
+    console.warn(`⚠️ Token inválido o expirado: ${error.message}`);
+    
+    return res.status(401).json({
+      success: false,
+      message: "Sesión expirada - Vuelve a iniciar sesión",
+      requiresLogin: true
+    });
   }
-}
+};
 
-export const hasRole =
-  (requiredRole: string) =>
-  (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (req.user?.role !== requiredRole) {
-      return res.status(403).json({
-        message: `Se requiere rol ${requiredRole}`,
+/**
+ * MIDDLEWARE DE AUTORIZACIÓN POR ROL
+ */
+export const hasRole = (requiredRole: UserRole) => {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Usuario no autenticado."
       });
     }
-    next();
+
+    if (checkLevel(req.user.role, requiredRole)) {
+      return next();
+    }
+
+    return res.status(403).json({
+      success: false,
+      message: `Acceso denegado. Requiere rol ${requiredRole}.`
+    });
   };
+};

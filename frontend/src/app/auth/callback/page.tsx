@@ -1,161 +1,134 @@
-// frontend/src/app/auth/callback/page.tsx (VERSION FINAL Y COMPATIBLE CON ESLINT)
-
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { supabase } from "@/utils/supabase";
-import { fetchApi } from "@/utils/api";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
-// ===============================================
-// INTERFACES
-// ===============================================
-
-interface SupabaseError {
-  message: string;
-}
-
-interface SupabaseSession {
-  access_token: string;
-  refresh_token: string;
-}
-
-interface GetSessionResponse {
-  data: {
-    session: SupabaseSession | null;
-  };
-  error: SupabaseError | null;
-}
-
-interface TrackingData {
-  sourceApp: string;
-  timestamp: string;
-  status: string;
-}
-
-// Función auxiliar para leer y decodificar el parámetro 'tracking'
-// ¡Debe llamarse solo cuando 'window' esté disponible!
-const readTrackingDataFromUrl = (): TrackingData | null => {
-  // Si esta función se llama, asumimos que 'window' existe.
-  const urlParams = new URLSearchParams(window.location.search);
-  const encodedData = urlParams.get("tracking");
-
-  if (encodedData) {
-    try {
-      const decodedData: string = decodeURIComponent(encodedData);
-      const data: TrackingData = JSON.parse(decodedData);
-      return data;
-    } catch (e) {
-      console.error("Error al decodificar o parsear datos de tracking:", e);
-    }
-  }
-  return null;
-};
-
-// ===============================================
-
-const AuthCallbackPage: React.FC = () => {
+const AuthHandler = () => {
   const router = useRouter();
-  const [status, setStatus] = useState<string>("Procesando autenticación...");
+  const searchParams = useSearchParams();
+  const [status, setStatus] = useState<string>("Iniciando procesamiento...");
+  const [error, setError] = useState<boolean>(false);
 
-  // 🚨 1. ÚNICO useEffect para manejar toda la lógica y el acceso a 'window'.
   useEffect(() => {
-    // Ejecutamos la lógica SÓLO si estamos en el cliente (que es lo que garantiza useEffect con []).
-
-    // 🚨 2. Leemos trackingInfo DENTRO del useEffect.
-    // Esto garantiza que 'window' ya está definido.
-    const trackingInfo: TrackingData | null = readTrackingDataFromUrl();
-
-    const handleOAuthToken = async () => {
-      setStatus("Obteniendo sesión de Supabase...");
-
-      const {
-        data: { session },
-        error,
-      } = (await supabase.auth.getSession()) as GetSessionResponse;
-
-      const isSessionValid = session?.access_token && session?.refresh_token;
-
-      if (error || !isSessionValid) {
-        console.error(
-          "No se pudo obtener la sesión de Supabase:",
-          error || "Tokens faltantes"
-        );
-        setStatus("Fallo en la autenticación. Redirigiendo...");
-        router.push("/");
-        return;
-      }
-
-      const accessToken = session!.access_token;
-      const refreshToken = session!.refresh_token;
-
+    const handleAuth = async () => {
       try {
-        setStatus("Intercambiando tokens con Express...");
+        setStatus("Obteniendo sesión de Supabase...");
 
-        await fetchApi("/auth/set-cookie", {
+        // 1. Validamos que el SDK de Supabase tenga la sesión activa
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+        if (sessionError || !session) {
+          console.error("❌ Sesión de Supabase no encontrada:", sessionError);
+          router.push("/?error=no_session");
+          return;
+        }
+
+        setStatus("Protegiendo tu sesión de forma segura...");
+
+        // ✅ SOLUCIÓN: NO ENVIAR REFRESH TOKEN AL BACKEND
+        // El backend solo necesita el access_token para crear la sesión inicial
+        // El refresh lo manejará el propio SDK de Supabase del lado del cliente
+        const baseUrl = (process.env.NEXT_PUBLIC_EXPRESS_URL || "http://localhost:4000/api").replace(/\/$/, "");
+        const backendUrl = `${baseUrl}/set-cookie`;
+
+        console.log("🚀 Enviando token a:", backendUrl);
+
+        // 2. Solo enviamos el access_token
+        const response = await fetch(backendUrl, {
           method: "POST",
-          body: {
-            access_token: accessToken,
-            refresh_token: refreshToken,
+          headers: {
+            "Content-Type": "application/json",
           },
+          credentials: "include",
+          body: JSON.stringify({
+            access_token: session.access_token,
+            // ⚠️ IMPORTANTE: No enviamos refresh_token porque Supabase usa uno interno
+            // En su lugar, el backend generará cookies de larga duración
+          }),
         });
 
-        // LÓGICA CONDICIONAL DE CIERRE/REDIRECCIÓN
-        if (trackingInfo) {
-          if (window.opener) {
-            window.opener.postMessage({ type: "auth:refresh" }, "*");
+        if (!response.ok) {
+          const errorMsg = response.status === 404
+            ? `Ruta no encontrada (404) en ${backendUrl}`
+            : `Error en el servidor: ${response.statusText}`;
+          throw new Error(errorMsg);
+        }
+
+        // 3. NO cerramos la sesión de Supabase aquí
+        // Dejamos que Supabase maneje el refresh automáticamente
+
+        setStatus("Sincronizando con la aplicación...");
+
+        const userRole = session.user?.app_metadata?.role || 'Viewer';
+        const userName = session.user?.user_metadata?.full_name || 'Usuario';
+
+        // 4. Finalización del flujo
+        if (window.opener) {
+          // Intentamos obtener el origen del redirect_to, si no, usamos "*" para desarrollo
+          // o capturamos el origen del opener de forma segura
+          const redirectTo = searchParams.get('redirect_to');
+          let targetOrigin = "*"; // Por defecto en desarrollo para evitar bloqueos
+
+          if (redirectTo) {
+            try {
+              targetOrigin = new URL(redirectTo).origin;
+            } catch (e) {
+              targetOrigin = "*";
+            }
           }
-          window.close();
+
+          window.opener.postMessage({
+            type: 'auth:success',
+            payload: { name: userName, role: userRole }
+          }, targetOrigin); // 👈 targetOrigin ahora será el de la app de Tapicería
+
+          // Un pequeño delay antes de cerrar para asegurar que el mensaje salió
+          setTimeout(() => window.close(), 100);
         } else {
-          setStatus("Éxito. Redirigiendo al Dashboard...");
-          console.log("dato recibido:", trackingInfo);
-          router.push("/dashboard");
-        }
-      } catch (exchangeError) {
-        console.error("Error al canjear token con Express:", exchangeError);
-        await supabase.auth.signOut();
-
-        let errorMessage = "Error en el intercambio de tokens.";
-
-        if (
-          typeof exchangeError === "object" &&
-          exchangeError !== null &&
-          "message" in exchangeError
-        ) {
-          errorMessage = (exchangeError as SupabaseError).message;
+          setTimeout(() => router.push("/dashboard"), 800);
         }
 
-        setStatus(`Error: ${errorMessage}. Redirigiendo...`);
-        router.push("/");
+      } catch (err: any) {
+        console.error("🔥 Error en el flujo de autenticación:", err.message);
+        setError(true);
+        setStatus(err.message);
       }
     };
 
-    handleOAuthToken();
-
-    // 🚨 Lista de dependencias vacía. Esto elimina las advertencias del linter
-    // y ejecuta el código una sola vez después del montaje, que es lo que queremos.
-  }, [router]);
+    handleAuth();
+  }, [router, searchParams]);
 
   return (
-    <div
-      style={{
-        padding: "40px",
-        textAlign: "center",
-        backgroundColor: "#f9f9f9",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-        alignItems: "center",
-      }}
-    >
-      <h1 style={{ color: "#0070f3", marginBottom: "10px" }}>
-        🚀 OAuth en curso
+    <div className={`p-8 bg-white shadow-xl rounded-2xl text-center space-y-4 border-2 ${error ? 'border-red-500' : 'border-slate-100'}`}>
+      {!error ? (
+        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+      ) : (
+        <div className="text-4xl">⚠️</div>
+      )}
+      <h1 className="text-xl font-bold text-slate-800">
+        {error ? "Fallo de Conexión" : "Finalizando Login"}
       </h1>
-      <p style={{ color: "#333" }}>{status}</p>
-      <p style={{ marginTop: "20px", fontSize: "small", color: "#666" }}>
-        No cierres esta ventana.
-      </p>
+      <p className={`text-sm ${error ? 'text-red-600' : 'text-slate-500'}`}>{status}</p>
+
+      {error && (
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          Reintentar
+        </button>
+      )}
+    </div>
+  );
+};
+
+const AuthCallbackPage: React.FC = () => {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6">
+      <Suspense fallback={<div className="text-slate-400">Cargando módulos de seguridad...</div>}>
+        <AuthHandler />
+      </Suspense>
     </div>
   );
 };

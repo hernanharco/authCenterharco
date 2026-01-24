@@ -1,4 +1,4 @@
-export type UserRole = "Admin" | "Editor" | "Viewer";
+export type UserRole = 'SuperAdmin' | 'Owner' | 'Viewer' | 'Admin' | 'Editor';
 
 // En src/lib/types.ts o similar
 export interface User {  

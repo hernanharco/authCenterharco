@@ -3,240 +3,188 @@ import {
   verifySupabaseToken,
   setAuthCookie,
   clearAuthCookies,
-  refreshAuthToken,
-  getAllUsersFromAuth
-} from '../services/authService';
-import { authenticateToken, hasRole } from '../middleware/authMiddleware';
-import { supabase } from '../services/authService';
+  getAllUsersFromAuth,
+  updateUserRole, // Importante añadir esta
+  supabase,
+  supabaseAdmin, // Necesario para el DELETE  
+} from '@/services/authService';
+import { verifySession, hasRole } from '../middleware/authMiddleware';
 
 const router = Router();
 
 /* =================================================
-   AUTENTICACIÓN Y COOKIES
+   1. AUTENTICACIÓN Y COOKIES
 ================================================= */
 
-// POST /auth/set-cookie
-router.post('/set-cookie', async (req: Request, res: Response) => {
-  const { access_token, refresh_token } = req.body;
+// Reemplaza el endpoint /set-cookie
 
-  if (!access_token || !refresh_token) {
-    return res.status(400).json({ message: 'Tokens requeridos' });
+router.post('/set-cookie', async (req: Request, res: Response) => {
+  const access_token = req.body?.access_token;
+
+  console.log("\n🔄 === SINCRONIZANDO TOKEN ===");
+  console.log("Access Token presente:", !!access_token);
+
+  if (!access_token) {
+    return res.status(400).json({
+      success: false,
+      message: 'Access token requerido.'
+    });
+  }
+
+  // Validación del Access Token (debe ser JWT)
+  const isValidJWT = (token: string) => token.split('.').length === 3;
+
+  if (!isValidJWT(access_token)) {
+    console.error("❌ Access token NO es un JWT válido");
+    return res.status(400).json({
+      success: false,
+      message: 'Access token inválido (no es JWT)'
+    });
   }
 
   try {
+    // Validar el access token
     const payload = await verifySupabaseToken(access_token);
 
-    setAuthCookie(res, access_token, 'authToken');
-    setAuthCookie(res, refresh_token, 'refreshToken');
+    console.log("✅ Access token validado para:", payload.email);
 
-    res.json({
-      message: 'Sesión iniciada',
+    // ✅ SOLUCIÓN: Solo establecemos el access token como cookie
+    // La cookie tendrá una duración de 1 hora (igual que el token)
+    setAuthCookie(res, access_token, 'authToken');
+
+    console.log("✅ Cookie de sesión actualizada");
+    console.log("⏰ Próxima renovación automática en ~50 minutos");
+    console.log("=================================\n");
+
+    return res.json({
+      success: true,
+      message: 'Sesión sincronizada',
       email: payload.email,
+      role: payload.role
     });
   } catch (error: any) {
-    console.error('❌ Error en set-cookie:', error.message);
-    res.status(401).json({ message: 'Token inválido', error: error.message });
+    console.error("❌ Error al validar access token:", error.message);
+    return res.status(401).json({
+      success: false,
+      message: 'Access token inválido',
+      details: error.message
+    });
   }
 });
 
-// POST /auth/logout
-router.post('/logout', (_req, res) => {
-  clearAuthCookies(res);
-  res.json({ message: 'Sesión cerrada' });
-});
-
 /* =================================================
-   RUTAS PROTEGIDAS (USUARIO)
+   2. GESTIÓN DE PERFILES (Dashboard)
 ================================================= */
 
-// GET /auth/perfil (La que buscabas)
-router.get('/perfil', authenticateToken, (req: any, res: Response) => {
-  res.json({
-    success: true,
-    message: 'Perfil cargado correctamente',
-    user: req.user,
-  });
-});
-
-// GET /auth/me
-router.get('/me', authenticateToken, (req: any, res: Response) => {
-  res.json({ user: req.user });
-});
-
-/* =================================================
-   ADMINISTRACIÓN Y REFRESH
-================================================= */
-
-// GET /auth/admin
-router.get('/admin', authenticateToken, hasRole('admin'), (_req, res) => {
-  res.json({ secret: '🧠 Datos ultra secretos del servidor' });
-});
-
-// POST /auth/refresh
-router.post('/refresh', async (req: Request, res: Response) => {
-  const refreshToken = req.cookies?.refreshToken;
-
-  if (!refreshToken)
-    return res.status(401).json({ message: 'No hay refresh token' });
-
+// GET /api/profiles - Listado de usuarios para la tabla
+router.get('/profiles', verifySession, hasRole('Admin'), async (req: any, res: Response) => {
   try {
-    const session = await refreshAuthToken(refreshToken);
-    setAuthCookie(res, session.access_token, 'authToken');
-    setAuthCookie(res, session.refresh_token, 'refreshToken');
-    res.json({ message: 'Sesión renovada' });
-  } catch {
-    clearAuthCookies(res);
-    res.status(401).json({ message: 'Sesión expirada' });
-  }
-});
+    const isCountOnly = req.query.count === 'true';
 
-/* =================================================
-   ADMINISTRACIÓN DE PERFILES
-================================================= */
-
-// GET /auth/profiles - Listar todos los perfiles (solo admin)
-router.get(
-  '/profiles',
-  authenticateToken,
-  hasRole('admin'),
-  async (_req: any, res: Response) => {
-    try {
-      const { data: profiles, error } = await supabase
-        .from('users')
-        .select('id, email, role, created_at, updated_at')
-        .order('created_at', { ascending: false });
-
+    if (isCountOnly) {
+      const { count, error } = await supabase.from('users').select('*', { count: 'exact', head: true });
       if (error) throw error;
-
-      res.json({
-        success: true,
-        profiles: profiles || [],
-      });
-    } catch (error: any) {
-      console.error('Error al obtener perfiles:', error);
-      res.status(500).json({ message: 'Error al obtener perfiles' });
-    }
-  },
-);
-
-// PUT /auth/profiles/:id/role - Actualizar rol de usuario (solo admin)
-router.put(
-  '/profiles/:id/role',
-  authenticateToken,
-  hasRole('admin'),
-  async (req: any, res: Response) => {
-    const { id } = req.params;
-    const { role } = req.body;
-
-    if (!role || !['user', 'admin', 'moderator'].includes(role)) {
-      return res.status(400).json({ message: 'Rol inválido' });
+      return res.json({ success: true, total: count || 0 });
     }
 
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .update({ role, updated_at: new Date().toISOString() })
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      res.json({
-        success: true,
-        message: 'Rol actualizado correctamente',
-
-        user: data,
-      });
-    } catch (error: any) {
-      console.error('Error al actualizar rol:', error);
-      res.status(500).json({ message: 'Error al actualizar rol' });
-    }
-  },
-);
-
-// DELETE /auth/profiles/:id - Eliminar usuario (solo admin)
-router.delete(
-  '/profiles/:id',
-  authenticateToken,
-  hasRole('admin'),
-  async (req: any, res: Response) => {
-    const { id } = req.params;
-
-    // Evitar que un admin se elimine a sí mismo
-    if (req.user.id === id) {
-      return res
-        .status(400)
-        .json({ message: 'No puedes eliminar tu propio usuario' });
-    }
-
-    try {
-      // Eliminar de Supabase Auth
-      const { error: authError } = await supabase.auth.admin.deleteUser(id);
-      if (authError) throw authError;
-
-      // Eliminar de la tabla users
-      const { error: dbError } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', id);
-
-      if (dbError) throw dbError;
-
-      res.json({
-        success: true,
-        message: 'Usuario eliminado correctamente',
-      });
-    } catch (error: any) {
-      console.error('Error al eliminar usuario:', error);
-      res.status(500).json({ message: 'Error al eliminar usuario' });
-    }
-  },
-);
-
-// PUT /auth/profile - Actualizar perfil propio
-router.put('/profile', authenticateToken, async (req: any, res: Response) => {
-  const { email } = req.body;
-  const userId = req.user.id;
-
-  if (!email) {
-    return res.status(400).json({ message: 'Email es requerido' });
-  }
-
-  try {
-    const { data, error } = await supabase
+    const { data: profiles, error } = await supabase
       .from('users')
-      .update({ email, updated_at: new Date().toISOString() })
-      .eq('id', userId)
-      .select()
-      .single();
+      .select('id, email, role, updated_at')
+      .order('updated_at', { ascending: false });
 
     if (error) throw error;
-
-    res.json({
-      success: true,
-      message: 'Perfil actualizado correctamente',
-      user: data,
-    });
+    res.json({ success: true, profiles: profiles || [] });
   } catch (error: any) {
-    console.error('Error al actualizar perfil:', error);
-    res.status(500).json({ message: 'Error al actualizar perfil' });
+    res.status(500).json({ success: false, message: 'Error en base de datos', error: error.message });
   }
 });
 
-// Para llamar toda la Informacion
-router.get('/admin/all-users', async (req, res) => {
+// PATCH /api/profiles/:id/role - Actualización de rango con jerarquía
+router.patch('/profiles/:id/role', verifySession, hasRole('Admin'), async (req: any, res: Response) => {
+  const { id } = req.params;
+  const { role } = req.body;
+  const executorRole = req.user.role;
+
+  try {
+    // Protección de jerarquía: Un Admin no puede crear SuperAdmins/Owners
+    if ((role === 'SuperAdmin' || role === 'Owner') && executorRole === 'Admin') {
+      return res.status(403).json({ success: false, message: "No puedes asignar un rango superior al tuyo." });
+    }
+
+    await updateUserRole(id, role);
+    res.json({ success: true, message: 'Rol actualizado en todo el sistema' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// DELETE /api/profiles/:id - Eliminación completa
+router.delete('/profiles/:id', verifySession, hasRole('Admin'), async (req: any, res: Response) => {
+  const { id } = req.params;
+  const executorRole = req.user.role;
+
+  try {
+    const { data: targetUser } = await supabase.from('users').select('role').eq('id', id).single();
+
+    if (targetUser && (targetUser.role === 'Owner' || targetUser.role === 'SuperAdmin')) {
+      if (executorRole === 'Admin') {
+        return res.status(403).json({ message: "No puedes borrar a un superior." });
+      }
+    }
+
+    // Borramos de la tabla pública
+    await supabase.from('users').delete().eq('id', id);
+    // Borramos de Auth usando el cliente Admin
+    await supabaseAdmin.auth.admin.deleteUser(id);
+
+    res.json({ success: true, message: 'Usuario eliminado permanentemente' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/* =================================================
+   3. INFORMACIÓN DE USUARIO Y AUDITORÍA
+================================================= */
+
+router.get('/perfil', verifySession, (req: any, res: Response) => {
+  res.json({ success: true, user: req.user });
+});
+
+/* =================================================
+   4. TODOS LOS CLIENTES DE SUPABASE
+================================================= */
+
+router.get('/admin/all-users', verifySession, hasRole('Admin'), async (req, res) => {
   try {
     const users = await getAllUsersFromAuth();
     res.json({ success: true, data: users });
   } catch (error: any) {
-    // ESTO ES CLAVE: Imprime el error real en tu terminal de Linux
-    console.error("ERROR REAL EN EL BACKEND:", error); 
+    res.status(500).json({ success: false, error: "Error al obtener usuarios de Auth" });
+  }
+});
+
+/* =================================================
+   5. CERRAR SESIÓN (LOGOUT)
+================================================= */
+
+// El frontend llama a /api/logout (asumiendo que el prefijo en app.ts es /api)
+router.post('/logout', (req: Request, res: Response) => {
+  try {
+    console.log("🔐 Cerrando sesión y limpiando cookies...");
     
-    res.status(500).json({ 
-      success: false, 
-      message: "Error al obtener usuarios",
-      debug: error.message // Esto te dirá en Postman qué falló exactamente
+    // Función que ya tienes importada para limpiar cookies del navegador
+    clearAuthCookies(res);
+
+    return res.json({
+      success: true,
+      message: 'Sesión cerrada correctamente en el servidor'
+    });
+  } catch (error: any) {
+    console.error("❌ Error en logout:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Error al cerrar sesión'
     });
   }
 });

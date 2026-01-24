@@ -10,6 +10,8 @@
     "rootDir": "./src",
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
+    /* --- CONFIGURACIÓN DE TIPOS --- */
+    "types": ["node", "express", "cookie-parser", "jsonwebtoken"],
     /* --- CONFIGURACIÓN DE RUTAS --- */
     "baseUrl": ".", 
     "paths": {
