@@ -7,7 +7,7 @@ import {
   updateUserRole, // Importante añadir esta
   supabase,
   supabaseAdmin, // Necesario para el DELETE  
-} from '@/services/authService';
+} from '../services/authService';
 import { verifySession, hasRole } from '../middleware/authMiddleware';
 
 const router = Router();
@@ -172,7 +172,7 @@ router.get('/admin/all-users', verifySession, hasRole('Admin'), async (req, res)
 router.post('/logout', (req: Request, res: Response) => {
   try {
     console.log("🔐 Cerrando sesión y limpiando cookies...");
-    
+
     // Función que ya tienes importada para limpiar cookies del navegador
     clearAuthCookies(res);
 

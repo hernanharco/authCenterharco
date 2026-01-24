@@ -1,8 +1,8 @@
 import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
 import { Response } from "express";
-import { AuthenticatedUser } from "@/types/authTypes";
-import { UserRole } from "@/types/permissionTypes";
+import { AuthenticatedUser } from "../types/authTypes";
+import { UserRole } from "../types/permissionTypes";
 
 // * =================================================
 //    CLIENTES SUPABASE (SDK CONFIGURATION)
@@ -156,9 +156,9 @@ export async function updateUserRole(userId: string, newRole: UserRole) {
     // 1. Actualizar en la tabla users
     const { error: dbError } = await supabase
       .from("users")
-      .update({ 
-        role: newRole, 
-        updated_at: new Date().toISOString() 
+      .update({
+        role: newRole,
+        updated_at: new Date().toISOString()
       })
       .eq("id", userId);
 
@@ -167,7 +167,7 @@ export async function updateUserRole(userId: string, newRole: UserRole) {
     // 2. Actualizar en Auth metadata
     const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
       userId,
-      { 
+      {
         app_metadata: { role: newRole },
         user_metadata: { role: newRole }
       }
