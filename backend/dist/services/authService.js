@@ -21,18 +21,16 @@ async function verifySupabaseToken(token) {
  * MEJORA ARQUITECTÓNICA: Manejo dinámico de Cookies para SaaS
  */
 function setAuthCookie(res, token, name) {
-    // Render siempre debe tener NODE_ENV=production en sus variables de entorno
-    const isProd = process.env.NODE_ENV === "production";
+    // Si la petición viene de un localhost, relajamos la seguridad para pruebas
+    const isLocalRequest = res.req.headers.origin?.includes('localhost');
 
     res.cookie(name, token, {
         httpOnly: true,
-        // En producción (Render), secure DEBE ser true porque usa HTTPS
-        secure: isProd, 
-        // SameSite 'none' permite que Vercel reciba la cookie desde Render
-        sameSite: isProd ? "none" : "lax",
+        // Si es local, secure debe ser false, si es producción real, true
+        secure: isLocalRequest ? false : true, 
+        // SameSite 'none' requiere HTTPS. Si es local usamos 'lax'
+        sameSite: isLocalRequest ? "lax" : "none",
         path: "/",
-        // IMPORTANTE: Eliminamos 'domain: localhost' para que el navegador 
-        // asigne automáticamente el dominio del servidor (Render o Local)
         maxAge: name === "refreshToken" ? 604800000 : 3600000,
     });
 }
