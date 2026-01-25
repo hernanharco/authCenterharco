@@ -10,23 +10,29 @@ const router = (0, express_1.Router)();
  */
 router.post('/set-cookie', async (req, res) => {
     const { access_token, refresh_token } = req.body;
-    if (!access_token || !refresh_token) {
-        return res.status(400).json({ message: 'Se requieren tokens de acceso y refresco.' });
+
+    // Cambiamos la validación: ahora solo el access_token es obligatorio
+    if (!access_token) {
+        return res.status(400).json({ message: 'Se requiere el token de acceso.' });
     }
+
     try {
-        // 1. Validamos que el token de Supabase sea real
-        const user = await (0, authService_1.verifySupabaseToken)(access_token);
-        // 2. Si es válido, guardamos las cookies HttpOnly en el navegador
-        (0, authService_1.setAuthCookie)(res, access_token, 'authToken');
-        (0, authService_1.setAuthCookie)(res, refresh_token, 'refreshToken');
-        // 3. Respondemos éxito
+        const user = await verifySupabaseToken(access_token);
+        
+        // Guardamos la cookie del access_token
+        setAuthCookie(res, access_token, 'authToken');
+
+        // Solo guardamos la de refresh si viene en el body
+        if (refresh_token) {
+            setAuthCookie(res, refresh_token, 'refreshToken');
+        }
+
         res.json({
             success: true,
             message: 'Sesión sincronizada con éxito.',
             user: { email: user.email }
         });
-    }
-    catch (error) {
+    } catch (error) {
         res.status(401).json({ message: "Error de autenticación", error: error.message });
     }
 });
