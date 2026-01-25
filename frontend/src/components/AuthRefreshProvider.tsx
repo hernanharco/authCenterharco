@@ -54,9 +54,14 @@ export const AuthRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ c
     lastRefreshTime.current = now;
 
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_EXPRESS_URL || 'http://localhost:4000/api';
-      console.log('🌐 Backend URL:', backendUrl);
+      // 🎯 CAMBIO CRÍTICO: Usar la ruta del proxy en lugar de URL externa
+      // En producción: /api/v1/set-cookie (pasa por el proxy de Vercel)
+      // En desarrollo: http://localhost:4000/api/set-cookie (directo al backend local)
+      const backendUrl = process.env.NODE_ENV === 'production' 
+        ? '/api/v1'  // Usa el proxy configurado en next.config.js
+        : 'http://localhost:4000/api';  // Desarrollo local
 
+      console.log('🌐 Backend URL:', backendUrl);
       console.log('🔄 Sincronizando nuevo token con backend...');
 
       const response = await fetch(`${backendUrl}/set-cookie`, {
@@ -64,17 +69,19 @@ export const AuthRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ c
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
+        credentials: 'include',  // ✅ Permite envío/recepción de cookies
         body: JSON.stringify({
           access_token: accessToken
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`Backend respondió con ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`Backend respondió con ${response.status}: ${errorText}`);
       }
 
-      console.log('✅ Token sincronizado exitosamente');
+      const data = await response.json();
+      console.log('✅ Token sincronizado exitosamente:', data);
     } catch (error: unknown) {
       console.error('❌ Error al sincronizar token:', error);
 
@@ -87,6 +94,7 @@ export const AuthRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   useEffect(() => {
     console.log('🔐 Iniciando sistema de refresh automático...');
+    console.log('🌍 Entorno:', process.env.NODE_ENV);
 
     /**
      * 📡 LISTENER DE EVENTOS DE SUPABASE
@@ -101,8 +109,26 @@ export const AuthRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ c
         console.log(`🔔 Evento de auth: ${event}`);
 
         switch (event) {
+          case 'INITIAL_SESSION':
+            // ⚠️ IMPORTANTE: Este evento ocurre al cargar la página
+            // Solo sincronizar si hay una sesión activa
+            if (session?.access_token) {
+              console.log('🔍 Sesión inicial detectada, sincronizando...');
+              await syncTokenWithBackend(session.access_token);
+            } else {
+              console.log('ℹ️ No hay sesión activa');
+            }
+            break;
+
           case 'SIGNED_IN':
+            console.log('👋 Usuario inició sesión');
+            if (session?.access_token) {
+              await syncTokenWithBackend(session.access_token);
+            }
+            break;
+
           case 'TOKEN_REFRESHED':
+            console.log('🔄 Token refrescado automáticamente');
             if (session?.access_token) {
               await syncTokenWithBackend(session.access_token);
             }
@@ -112,13 +138,17 @@ export const AuthRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ c
             console.log('👋 Usuario cerró sesión');
             // Limpiar cookies del backend
             try {
-              const backendUrl = process.env.NEXT_PUBLIC_EXPRESS_URL || 'http://localhost:4000/api';
+              const backendUrl = process.env.NODE_ENV === 'production' 
+                ? '/api/v1' 
+                : 'http://localhost:4000/api';
+              
               await fetch(`${backendUrl}/logout`, {
                 method: 'POST',
                 credentials: 'include'
               });
-            } catch {
-              console.warn('⚠️ No se pudo limpiar sesión del backend');
+              console.log('✅ Sesión del backend limpiada');
+            } catch (error) {
+              console.warn('⚠️ No se pudo limpiar sesión del backend:', error);
             }
             break;
 
@@ -127,25 +157,11 @@ export const AuthRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ c
             break;
 
           default:
+            console.log(`ℹ️ Evento no manejado: ${event}`);
             break;
         }
       }
     );
-
-    /**
-     * 🔄 VERIFICACIÓN INICIAL
-     * Sincroniza la sesión actual al montar el componente
-     */
-    const initializeSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-
-      if (session?.access_token) {
-        console.log('🔍 Sesión existente encontrada, sincronizando...');
-        await syncTokenWithBackend(session.access_token);
-      }
-    };
-
-    initializeSession();
 
     // Cleanup: Desuscribirse cuando el componente se desmonte
     return () => {
