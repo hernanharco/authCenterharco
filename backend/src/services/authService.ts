@@ -87,35 +87,56 @@ export function setAuthCookie(
   token: string,
   name: "authToken" | "refreshToken"
 ) {
-    // Detectamos el origen para saber si estamos en local o en Vercel
-    const origin = res.req.headers.origin || "";
-    const isLocal = origin.includes('localhost');
+  // Detectamos el origen para saber si estamos en local o en producción
+  const origin = res.req.headers.origin || "";
+  const isLocal = origin.includes('localhost');
 
-    res.cookie(name, token, {
-        httpOnly: true,
-        // EN PRODUCCIÓN (Vercel -> Render) DEBE SER TRUE
-        secure: isLocal ? false : true, 
-        // EN PRODUCCIÓN (Vercel -> Render) DEBE SER 'none'
-        sameSite: isLocal ? "lax" : "none",
-        path: "/",
-        // Si es el authToken dura 1 hora, si es refreshToken dura 1 semana
-        maxAge: name === 'refreshToken' ? 7 * 24 * 60 * 60 * 1000 : 60 * 60 * 1000,
-    });
-    
-    console.log(`🍪 Cookie ${name} configurada (Secure: ${!isLocal}, SameSite: ${isLocal ? 'lax' : 'none'})`);
+  // Detección estricta para producción Vercel + Render
+  const isVercelProduction = origin.includes('.vercel.app') || origin.includes('.render.com');
+
+  // Configuración estricta para producción cross-site
+  const cookieConfig = {
+    httpOnly: true,
+    // Siempre true en producción (Vercel -> Render), false solo en localhost
+    secure: isLocal ? false : true,
+    // Siempre 'none' en producción cross-site, 'lax' solo en localhost
+    sameSite: (isLocal ? "lax" : "none") as "lax" | "none",
+    path: "/",
+    // Si es el authToken dura 1 hora, si es refreshToken dura 1 semana
+    maxAge: name === 'refreshToken' ? 7 * 24 * 60 * 60 * 1000 : 60 * 60 * 1000,
+  };
+
+  res.cookie(name, token, cookieConfig);
+
+  console.log(`🍪 Cookie ${name} configurada:`);
+  console.log(`   - Origen: ${origin}`);
+  console.log(`   - Secure: ${cookieConfig.secure}`);
+  console.log(`   - SameSite: ${cookieConfig.sameSite}`);
+  console.log(`   - Es producción Vercel: ${isVercelProduction}`);
 }
 
 export function clearAuthCookies(res: Response) {
-  const isProd = process.env.NODE_ENV === "production";
+  // Detectamos el origen para saber si estamos en local o en producción
+  const origin = res.req.headers.origin || "";
+  const isLocal = origin.includes('localhost');
+
+  // Configuración consistente con setAuthCookie
   const options = {
     httpOnly: true,
     expires: new Date(0),
     path: "/",
-    sameSite: (isProd ? "none" : "lax") as any,
-    secure: isProd
+    sameSite: (isLocal ? "lax" : "none") as "lax" | "none",
+    secure: !isLocal // true en producción, false en localhost
   };
+
   res.cookie("authToken", "", options);
   res.cookie("refreshToken", "", options);
+
+  console.log("🗑️ Cookies eliminadas con configuración:", {
+    origin,
+    secure: options.secure,
+    sameSite: options.sameSite
+  });
 }
 
 /* =================================================

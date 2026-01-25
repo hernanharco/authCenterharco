@@ -2,24 +2,30 @@ import { CorsOptions } from 'cors';
 
 /**
  * Orígenes permitidos para desarrollo y producción
+ * Procesados con .split(",").map() para eliminar espacios invisibles
  */
-const allowedOrigins = [
+const rawOrigins = [
   process.env.FRONTEND_URL,          // AuthCenter (localhost:3000)
   process.env.AUTH_FRONTEND_URL,     // AuthCenter alternativo
   'http://localhost:3000',
   'http://127.0.0.1:3000',
-  
+
   // Tapicería - Desarrollo
   'http://localhost:9002',
   'http://127.0.0.1:9002',
-  
+
   // Otras apps que uses
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  
+
   // Producción (cuando despliegues)
   process.env.TAPICERIA_PRODUCTION_URL, // Añadir en .env
-].filter(Boolean) as string[];
+].filter(Boolean);
+
+// Procesamos los orígenes para eliminar espacios invisibles
+const allowedOrigins = rawOrigins.flatMap(origin =>
+  origin ? origin.split(",").map(o => o.trim()).filter(Boolean) : []
+);
 
 export const corsOptions: CorsOptions = {
   origin: (origin, callback) => {
@@ -27,12 +33,12 @@ export const corsOptions: CorsOptions = {
     if (!origin) {
       return callback(null, true);
     }
-    
+
     // Verificar si está en la lista de permitidos
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-    
+
     // En desarrollo, permitir cualquier localhost
     if (process.env.NODE_ENV === 'development' && origin.includes('localhost')) {
       return callback(null, true);
