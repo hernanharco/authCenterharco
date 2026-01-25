@@ -29,11 +29,11 @@ export default function DashboardPage() {
           const count = data.profiles.length;
 
           // 2. Roles Únicos
-          const uniqueRoles = new Set(data.profiles.map((p: any) => p.role)).size;
+          const uniqueRoles = new Set(data.profiles.map((p: { role: string }) => p.role)).size;
 
           // 3. Simulación de Uso de API (Aquí ya tenemos acceso a 'data')
           // En el futuro, esto podría venir de data.usage si tu backend lo envía
-          const simulatedCalls = 450; 
+          const simulatedCalls = 450;
           const limit = 1000;
           const usagePercentage = (simulatedCalls / limit) * 100;
 
@@ -54,29 +54,29 @@ export default function DashboardPage() {
   }, []);
 
   const stats = [
-    { 
-      label: "Usuarios Totales", 
-      value: statsData.isLoading ? "..." : statsData.totalUsers.toString(), 
-      icon: Users, 
-      color: "text-blue-600", 
-      bg: "bg-blue-50", 
-      trend: statsData.isLoading ? "Cargando..." : `+${statsData.totalUsers}` 
+    {
+      label: "Usuarios Totales",
+      value: statsData.isLoading ? "..." : statsData.totalUsers.toString(),
+      icon: Users,
+      color: "text-blue-600",
+      bg: "bg-blue-50",
+      trend: statsData.isLoading ? "Cargando..." : `+${statsData.totalUsers}`
     },
-    { 
-      label: "Roles Definidos", 
-      value: statsData.isLoading ? "..." : statsData.totalRoles.toString(), 
-      icon: ShieldCheck, 
-      color: "text-indigo-600", 
-      bg: "bg-indigo-50", 
-      trend: "Admin/Editor" 
+    {
+      label: "Roles Definidos",
+      value: statsData.isLoading ? "..." : statsData.totalRoles.toString(),
+      icon: ShieldCheck,
+      color: "text-indigo-600",
+      bg: "bg-indigo-50",
+      trend: "Admin/Editor"
     },
-    { 
-      label: "Uso de API (Mes)", 
-      value: statsData.isLoading ? "..." : `${statsData.apiUsage}%`, 
-      icon: Activity, 
-      color: statsData.apiUsage > 90 ? "text-red-600" : "text-emerald-600", 
-      bg: statsData.apiUsage > 90 ? "bg-red-50" : "bg-emerald-50", 
-      trend: "Límite: 1k reqs" 
+    {
+      label: "Uso de API (Mes)",
+      value: statsData.isLoading ? "..." : `${statsData.apiUsage}%`,
+      icon: Activity,
+      color: statsData.apiUsage > 90 ? "text-red-600" : "text-emerald-600",
+      bg: statsData.apiUsage > 90 ? "bg-red-50" : "bg-emerald-50",
+      trend: "Límite: 1k reqs"
     }
   ];
 

@@ -16,7 +16,7 @@ import {
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { MoreHorizontal, ArrowUp, ArrowDown, Search, Trash2, ShieldCheck } from 'lucide-react'; 
+import { MoreHorizontal, Search, Trash2, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { fetchApi } from '@/utils/api';
@@ -24,7 +24,6 @@ import { cn } from '@/lib/utils';
 
 interface UserTableProps {
   initialUsers: User[];
-  currentProject: string;
   onUpdate?: () => void;
 }
 
@@ -42,7 +41,7 @@ const roleBadgeVariants: Record<UserRole, string> = {
 
 type SortableKeys = 'name' | 'project_slug' | 'role';
 
-export default function UserTable({ initialUsers, currentProject, onUpdate }: UserTableProps) {
+export default function UserTable({ initialUsers, onUpdate }: UserTableProps) {
   const [users, setUsers] = React.useState(initialUsers);
   const [isUpdating, setIsUpdating] = React.useState<string | null>(null);
   const { toast } = useToast();
@@ -63,7 +62,7 @@ export default function UserTable({ initialUsers, currentProject, onUpdate }: Us
       toast({ variant: "destructive", title: "Acción prohibida", description: "No se puede eliminar a un SuperAdmin." });
       return;
     }
-    
+
     if (!confirm(`¿Eliminar a ${user.name}?`)) return;
 
     setIsUpdating(user.id);
@@ -71,8 +70,9 @@ export default function UserTable({ initialUsers, currentProject, onUpdate }: Us
       await fetchApi(`/profiles/${user.id}`, { method: 'DELETE' });
       toast({ title: "Eliminado", description: "Usuario borrado con éxito" });
       if (onUpdate) onUpdate();
-    } catch (error: any) {
-      toast({ variant: "destructive", title: "Error", description: error.message });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      toast({ variant: "destructive", title: "Error", description: errorMessage });
     } finally {
       setIsUpdating(null);
     }
@@ -83,30 +83,31 @@ export default function UserTable({ initialUsers, currentProject, onUpdate }: Us
     try {
       await fetchApi(`/profiles/${userId}/role`, {
         method: 'PATCH',
-        body: { role: newRole } as any,
+        body: JSON.stringify({ role: newRole }),
       });
       toast({ title: "¡Actualizado!", description: `Rol cambiado a ${newRole}` });
       if (onUpdate) onUpdate();
-    } catch (error: any) {
-      toast({ variant: "destructive", title: "Error", description: error.message });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      toast({ variant: "destructive", title: "Error", description: errorMessage });
     } finally {
       setIsUpdating(null);
     }
   };
 
   const requestSort = (key: SortableKeys) => {
-    let order: 'asc' | 'desc' = sortConfig.key === key && sortConfig.order === 'asc' ? 'desc' : 'asc';
+    const order: 'asc' | 'desc' = sortConfig.key === key && sortConfig.order === 'asc' ? 'desc' : 'asc';
     setSortConfig({ key, order });
   };
 
   const filteredAndSortedUsers = React.useMemo(() => {
-    let filtered = users.filter(user =>
+    const filtered = users.filter(user =>
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase())
     );
     filtered.sort((a, b) => {
-      const valA = (a[sortConfig.key] || '').toLowerCase();
-      const valB = (b[sortConfig.key] || '').toLowerCase();
+      const valA = (a[sortConfig.key] as string || '').toLowerCase();
+      const valB = (b[sortConfig.key] as string || '').toLowerCase();
       return sortConfig.order === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
     });
     return filtered;
@@ -186,7 +187,7 @@ export default function UserTable({ initialUsers, currentProject, onUpdate }: Us
                           ))}
                         </DropdownMenuRadioGroup>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           className="text-xs text-destructive focus:text-destructive cursor-pointer"
                           disabled={user.role === 'SuperAdmin'}
                           onClick={() => handleDeleteUser(user)}

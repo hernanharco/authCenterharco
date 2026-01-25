@@ -55,9 +55,9 @@ export const AuthRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
     try {
       const backendUrl = process.env.NEXT_PUBLIC_EXPRESS_URL || 'http://localhost:4000/api';
-      
+
       console.log('🔄 Sincronizando nuevo token con backend...');
-      
+
       const response = await fetch(`${backendUrl}/set-cookie`, {
         method: 'POST',
         headers: {
@@ -76,7 +76,7 @@ export const AuthRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ c
       console.log('✅ Token sincronizado exitosamente');
     } catch (error: unknown) {
       console.error('❌ Error al sincronizar token:', error);
-      
+
       // Si el backend no responde, no forzamos logout
       // El usuario puede seguir usando la app con Supabase
     } finally {
@@ -116,7 +116,7 @@ export const AuthRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ c
                 method: 'POST',
                 credentials: 'include'
               });
-            } catch (error) {
+            } catch {
               console.warn('⚠️ No se pudo limpiar sesión del backend');
             }
             break;
@@ -137,7 +137,7 @@ export const AuthRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ c
      */
     const initializeSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (session?.access_token) {
         console.log('🔍 Sesión existente encontrada, sincronizando...');
         await syncTokenWithBackend(session.access_token);

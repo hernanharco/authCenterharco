@@ -33,6 +33,7 @@ const AuthForm: React.FC = () => {
     setError(null);
 
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let authResponse: any;
 
       // --- PASO 1: AUTENTICACIÓN ---
@@ -63,10 +64,10 @@ const AuthForm: React.FC = () => {
         // Esto genera tus cookies HttpOnly seguras.
         await fetchApi('/set-cookie', {
           method: 'POST',
-          body: {
+          body: JSON.stringify({
             access_token: session.access_token,
             refresh_token: session.refresh_token,
-          } as any,
+          }),
         });
 
         // 🚨 PASO 3: LIMPIEZA DE SESIÓN LOCAL (SUPABASE FRONTEND)
@@ -92,14 +93,14 @@ const AuthForm: React.FC = () => {
           router.push("/dashboard");
         }
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
       let errorMessage = 'Error en la autenticación. Revisa credenciales.';
-      if (typeof err === 'object' && err !== null && 'message' in err) {
-        errorMessage = (err as SupabaseError).message;
+      if (err instanceof Error && 'message' in err) {
+        errorMessage = err.message;
       }
       setError(errorMessage);
-    }
+    } // Corregido aquí
   };
 
   // ----------------------------------------------------

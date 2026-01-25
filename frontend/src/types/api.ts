@@ -6,6 +6,9 @@ export interface UserProfile {
   id: string;
   email: string;
   role: string;
+  name?: string;  // Agregado para compatibilidad
+  project_slug?: string;  // Agregado para compatibilidad
+  avatar_url?: string;  // Agregado para compatibilidad
   updated_at?: string;
   created_at?: string;
 }
@@ -21,4 +24,5 @@ export interface ApiResponse<T = unknown> {
   profiles?: UserProfile[]; // Lista tipada en lugar de any[]
   total?: number;
   data?: T;                 // Para datos genéricos adicionales
+  user?: UserProfile;       // Para respuestas de perfil
 }

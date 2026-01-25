@@ -28,14 +28,17 @@ export default function PageUsers() {
 
       if (myProfile?.user) {
         setProfileData({
-          ...myProfile.user,
+          id: myProfile.user.id,
+          email: myProfile.user.email,
           name: myProfile.user.name || myProfile.user.email?.split('@')[0] || 'Usuario',
-          role: (myProfile.user.role as UserRole) || 'Viewer'
+          role: (myProfile.user.role as UserRole) || 'Viewer',
+          project_slug: myProfile.user.project_slug || 'Default',
+          avatar_url: myProfile.user.avatar_url || ''
         });
       }
 
-      if (allUsersData?.data) {
-        const mappedUsers: User[] = allUsersData.data.map((u: any) => ({
+      if (allUsersData?.data && Array.isArray(allUsersData.data)) {
+        const mappedUsers: User[] = allUsersData.data.map((u: { id: string; email: string; user_metadata?: { role?: string; full_name?: string; avatar_url?: string; project_slug?: string }; role?: string; name?: string; picture?: string; project_slug?: string }) => ({
           id: u.id,
           email: u.email,
           // IMPORTANTE: Priorizamos el rol de user_metadata que actualizamos en el PATCH
@@ -96,7 +99,6 @@ export default function PageUsers() {
         {/* Pasamos loadData como prop onUpdate */}
         <UserTable
           initialUsers={allUsers}
-          currentProject={currentProject}
           onUpdate={() => loadData(false)}
         />
       </main>

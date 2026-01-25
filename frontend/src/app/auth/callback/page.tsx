@@ -73,7 +73,7 @@ const AuthHandler = () => {
           if (redirectTo) {
             try {
               targetOrigin = new URL(redirectTo).origin;
-            } catch (e) {
+            } catch {
               targetOrigin = "*";
             }
           }
@@ -91,7 +91,7 @@ const AuthHandler = () => {
 
       } catch (err: unknown) {
         console.error("🔥 Error en el flujo de autenticación:", err);
-        setError(true);        
+        setError(true);
       }
     };
 

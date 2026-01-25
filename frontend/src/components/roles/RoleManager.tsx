@@ -1,9 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Shield, UserPlus, Globe, Building } from 'lucide-react';
 
 export default function RoleManager() {
-  const [newRoleName, setNewRoleName] = useState('');
-
   const roles = [
     { id: 1, name: 'SuperAdmin', icon: Globe, desc: 'Acceso total a todos los tenants.', color: 'text-purple-500' },
     { id: 2, name: 'Owner', icon: Building, desc: 'Dueño de la empresa contratante.', color: 'text-blue-500' },

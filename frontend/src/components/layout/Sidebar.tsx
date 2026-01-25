@@ -24,22 +24,17 @@ export default function Sidebar({ userRole, projectName }: SidebarProps) {
   ];
 
   const handleLogout = async () => {
-  try {
-    // Intentamos con el prefijo del módulo de autenticación
-    await fetchApi('/logout', { method: 'POST' });
-  } catch (error) {
-    // Si da 404, intentamos con la ruta raíz
     try {
+      // Intentamos con el prefijo del módulo de autenticación
       await fetchApi('/logout', { method: 'POST' });
-    } catch (err) {
+    } catch {
       console.warn('No se encontró endpoint de logout, limpiando cliente...');
+    } finally {
+      // Siempre redirigir al finalizar
+      router.push('/');
+      router.refresh();
     }
-  } finally {
-    // Siempre redirigir al finalizar
-    router.push('/');
-    router.refresh();
-  }
-};
+  };
 
   return (
     <aside className="w-64 bg-slate-900 flex flex-col border-r border-slate-800">
@@ -68,18 +63,17 @@ export default function Sidebar({ userRole, projectName }: SidebarProps) {
           if (!hasAccess) return null;
 
           return (
-            <Link 
-              key={item.id} 
+            <Link
+              key={item.id}
               href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group ${
-                isActive 
-                  ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" 
-                  : "text-slate-400 hover:bg-slate-800 hover:text-white"
-              }`}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group ${isActive
+                ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                }`}
             >
-              <item.icon 
-                size={20} 
-                className={isActive ? "text-white" : "group-hover:text-indigo-400"} 
+              <item.icon
+                size={20}
+                className={isActive ? "text-white" : "group-hover:text-indigo-400"}
               />
               <span className="text-sm font-medium">{item.label}</span>
             </Link>
@@ -95,8 +89,8 @@ export default function Sidebar({ userRole, projectName }: SidebarProps) {
           </div>
           <div className="flex-1 overflow-hidden">
             <p className="text-xs font-bold text-white truncate">{userRole}</p>
-            <button 
-              onClick={handleLogout} 
+            <button
+              onClick={handleLogout}
               className="text-[10px] text-red-500 hover:text-red-400 font-medium transition-colors flex items-center gap-1"
             >
               <LogOut size={10} />
