@@ -20,8 +20,8 @@ const nextConfig = {
       {
         // Cuando el frontend pida /api/profiles/..., 
         // Next.js lo pedirá al backend de Express automáticamente.
-        source: '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_EXPRESS_URL}/:path*`,
+        source: '/api/v1/:path*', 
+      destination: `https://authcenterharco-1.onrender.com/api/:path*`,
       },
     ]
   },
