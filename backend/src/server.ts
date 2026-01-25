@@ -35,7 +35,13 @@ app.use((req: Request, res: Response) => {
 });
 
 // 5. MANEJO DE ERRORES GLOBAL
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+// Definimos una interfaz para errores esperados
+interface AppError extends Error {
+  status?: number;
+  details?: unknown;
+}
+
+app.use((err: AppError, req: Request, res: Response, next: NextFunction) => {
   const status = err.status || 500;
   const message = err.message || "Error interno del servidor";
 
@@ -53,7 +59,7 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 app.listen(PORT, () => {
   console.log(`✅ Servidor SaaS corriendo en: http://localhost:${PORT}`);
   console.log(`🏠 Orígenes permitidos: ${process.env.FRONTEND_URL} y ${process.env.AUTH_FRONTEND_URL}`);
-}).on('error', (err: any) => {
+}).on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`❌ El puerto ${PORT} está ocupado. Usa 'fuser -k ${PORT}/tcp'`);
   } else {

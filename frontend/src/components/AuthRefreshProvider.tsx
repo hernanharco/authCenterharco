@@ -74,8 +74,8 @@ export const AuthRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
 
       console.log('✅ Token sincronizado exitosamente');
-    } catch (error: any) {
-      console.error('❌ Error al sincronizar token:', error.message);
+    } catch (error: unknown) {
+      console.error('❌ Error al sincronizar token:', error);
       
       // Si el backend no responde, no forzamos logout
       // El usuario puede seguir usando la app con Supabase

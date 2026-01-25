@@ -89,10 +89,9 @@ const AuthHandler = () => {
           setTimeout(() => router.push("/dashboard"), 800);
         }
 
-      } catch (err: any) {
-        console.error("🔥 Error en el flujo de autenticación:", err.message);
-        setError(true);
-        setStatus(err.message);
+      } catch (err: unknown) {
+        console.error("🔥 Error en el flujo de autenticación:", err);
+        setError(true);        
       }
     };
 

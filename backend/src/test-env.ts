@@ -4,6 +4,12 @@
 import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
 
+  // Definimos una interfaz para errores esperados
+interface AppError extends Error {
+  status?: number;
+  details?: unknown;
+}
+
 async function testSupabaseConnection() {
   console.log("\n🧪 ===== TEST DE CONEXIÓN SUPABASE =====\n");
 
@@ -30,8 +36,8 @@ async function testSupabaseConnection() {
     } else {
       console.log("✅ Conexión exitosa con anon key");
     }
-  } catch (err: any) {
-    console.error("❌ Excepción con anon key:", err.message);
+  } catch (err: unknown) {
+    console.error("❌ Excepción con anon key:", err);
   }
 
   // 3. Test con cliente admin (service key)
@@ -46,8 +52,8 @@ async function testSupabaseConnection() {
       console.log("✅ Conexión exitosa con service key");
       console.log(`   Total de usuarios en el sistema: ${data.users.length > 0 ? 'OK' : '0'}`);
     }
-  } catch (err: any) {
-    console.error("❌ Excepción con service key:", err.message);
+  } catch (err: unknown) {
+    console.error("❌ Excepción con service key:", err);
   }
 
   // 4. Verificar estructura de la base de datos
@@ -68,8 +74,8 @@ async function testSupabaseConnection() {
         console.log("   Estructura confirmada:", Object.keys(data[0]));
       }
     }
-  } catch (err: any) {
-    console.error("❌ Excepción al verificar tabla:", err.message);
+  } catch (err: unknown) {
+    console.error("❌ Excepción al verificar tabla:", err);
   }
 
   console.log("\n========================================\n");

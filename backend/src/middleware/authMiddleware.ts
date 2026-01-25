@@ -35,8 +35,8 @@ export const verifySession = async (
     console.log("✅ Sesión válida para:", req.user.email);
     return next();
 
-  } catch (error: any) {
-    console.warn(`⚠️ Token inválido o expirado: ${error.message}`);
+  } catch (error: unknown) {
+    console.warn(`⚠️ Token inválido o expirado: ${error}`);
 
     return res.status(401).json({
       success: false,

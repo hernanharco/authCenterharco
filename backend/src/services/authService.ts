@@ -72,8 +72,8 @@ export const verifySupabaseToken = async (token: string): Promise<AuthenticatedU
       email: user.email!,
       role: userRole
     };
-  } catch (error: any) {
-    console.error("🔴 Fallo completo en verifySupabaseToken:", error.message);
+  } catch (error: unknown) {
+    console.error("🔴 Fallo completo en verifySupabaseToken:", error);
     throw error;
   }
 };
@@ -128,8 +128,8 @@ export async function refreshAuthToken(refreshToken: string) {
 
     console.log("🔄 Sesión refrescada exitosamente");
     return data.session;
-  } catch (error: any) {
-    console.error("🔴 Fallo en refreshAuthToken:", error.message);
+  } catch (error: unknown) {
+    console.error("🔴 Fallo en refreshAuthToken:", error);
     throw error;
   }
 }
@@ -180,8 +180,8 @@ export async function updateUserRole(userId: string, newRole: UserRole) {
 
     console.log("✅ Rol actualizado correctamente:", newRole);
     return { success: true };
-  } catch (error: any) {
-    console.error("❌ Fallo en actualización de rol:", error.message);
+  } catch (error: unknown) {
+    console.error("❌ Fallo en actualización de rol:", error);
     throw error;
   }
 }

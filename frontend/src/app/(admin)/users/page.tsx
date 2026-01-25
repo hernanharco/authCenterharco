@@ -8,7 +8,7 @@ import { User, UserRole } from '@/lib/types';
 
 export default function PageUsers() {
   const [profileData, setProfileData] = useState<User | null>(null);
-  const [allUsers, setAllUsers] = useState<User[]>([]); 
+  const [allUsers, setAllUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentProject, setCurrentProject] = useState('');
   const router = useRouter();
@@ -17,7 +17,7 @@ export default function PageUsers() {
   const loadData = useCallback(async (showLoading = false) => {
     try {
       if (showLoading) setLoading(true);
-      
+
       const [myProfile, allUsersData] = await Promise.all([
         fetchApi('/perfil'),
         fetchApi('/admin/all-users')
@@ -42,14 +42,21 @@ export default function PageUsers() {
           role: (u.user_metadata?.role as UserRole) || (u.role as UserRole) || 'Viewer',
           name: u.user_metadata?.full_name || u.name || u.email.split('@')[0],
           avatar_url: u.user_metadata?.avatar_url || u.picture || '',
-          project_slug: u.project_slug || u.user_metadata?.project_slug || 'Default',            
+          project_slug: u.project_slug || u.user_metadata?.project_slug || 'Default',
         }));
-        
+
         setAllUsers(mappedUsers);
       }
-    } catch (error: any) {
-      console.error('Error cargando PageUsers:', error.message);
-      if (error.message.includes('Sesión')) router.push('/');
+    } catch (error: unknown) {
+      console.error('Error cargando PageUsers:', error);
+
+      // 1. Extraemos el mensaje de forma segura
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // 2. Ahora sí podemos usar .includes() sobre un string garantizado
+      if (errorMessage.includes('Sesión')) {
+        router.push('/');
+      }
     } finally {
       setLoading(false);
     }
@@ -61,7 +68,7 @@ export default function PageUsers() {
       setCurrentProject(hostname.split('.')[0] || 'Default');
     }
     loadData(true);
-  }, [loadData]);  
+  }, [loadData]);
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen bg-background">
@@ -87,10 +94,10 @@ export default function PageUsers() {
         </header>
 
         {/* Pasamos loadData como prop onUpdate */}
-        <UserTable 
-          initialUsers={allUsers} 
-          currentProject={currentProject} 
-          onUpdate={() => loadData(false)} 
+        <UserTable
+          initialUsers={allUsers}
+          currentProject={currentProject}
+          onUpdate={() => loadData(false)}
         />
       </main>
     </div>

@@ -61,11 +61,21 @@ export async function fetchApi<T = ApiResponse>(
         // 3. Respuesta Exitosa
         return await response.json() as T;
 
-    } catch (error: any) {
-        if (error.name === 'TypeError' && error.message.includes('fetch')) {
+    } catch (error: unknown) {
+    // 1. Verificamos si es una instancia de Error para acceder a sus propiedades con seguridad
+    if (error instanceof Error) {
+        // En Node.js/Browsers, los errores de red suelen ser TypeErrors
+        if (error.name === 'TypeError' && error.message.toLowerCase().includes('fetch')) {
             console.error('❌ El servidor Express en Linux no responde. ¿Está corriendo pnpm dev?');
             throw new Error('Servidor fuera de línea.');
         }
+        
+        // Si no es el error que buscamos, lanzamos el error original tipado
         throw error;
-    }    
+    }
+
+    // 2. Si el error no es una instancia de Error (un string o null), 
+    // lo convertimos en uno para mantener la consistencia al lanzar
+    throw new Error(String(error));
+}  
 }

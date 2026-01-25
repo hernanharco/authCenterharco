@@ -62,12 +62,12 @@ router.post('/set-cookie', async (req: Request, res: Response) => {
       email: payload.email,
       role: payload.role
     });
-  } catch (error: any) {
-    console.error("❌ Error al validar access token:", error.message);
+  } catch (error: unknown) {
+    console.error("❌ Error al validar access token:", error);
     return res.status(401).json({
       success: false,
       message: 'Access token inválido',
-      details: error.message
+      details: error
     });
   }
 });
@@ -75,7 +75,6 @@ router.post('/set-cookie', async (req: Request, res: Response) => {
 /* =================================================
    2. GESTIÓN DE PERFILES (Dashboard)
 ================================================= */
-
 // GET /api/profiles - Listado de usuarios para la tabla
 router.get('/profiles', verifySession, hasRole('Admin'), async (req: any, res: Response) => {
   try {
@@ -94,8 +93,8 @@ router.get('/profiles', verifySession, hasRole('Admin'), async (req: any, res: R
 
     if (error) throw error;
     res.json({ success: true, profiles: profiles || [] });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: 'Error en base de datos', error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, message: 'Error en base de datos', error: error});
   }
 });
 
@@ -113,8 +112,8 @@ router.patch('/profiles/:id/role', verifySession, hasRole('Admin'), async (req: 
 
     await updateUserRole(id, role);
     res.json({ success: true, message: 'Rol actualizado en todo el sistema' });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, message: error});
   }
 });
 
@@ -138,8 +137,8 @@ router.delete('/profiles/:id', verifySession, hasRole('Admin'), async (req: any,
     await supabaseAdmin.auth.admin.deleteUser(id);
 
     res.json({ success: true, message: 'Usuario eliminado permanentemente' });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, message: error});
   }
 });
 
@@ -159,7 +158,7 @@ router.get('/admin/all-users', verifySession, hasRole('Admin'), async (req, res)
   try {
     const users = await getAllUsersFromAuth();
     res.json({ success: true, data: users });
-  } catch (error: any) {
+  } catch (error: unknown) {
     res.status(500).json({ success: false, error: "Error al obtener usuarios de Auth" });
   }
 });
@@ -180,8 +179,8 @@ router.post('/logout', (req: Request, res: Response) => {
       success: true,
       message: 'Sesión cerrada correctamente en el servidor'
     });
-  } catch (error: any) {
-    console.error("❌ Error en logout:", error.message);
+  } catch (error: unknown) {
+    console.error("❌ Error en logout:", error);
     return res.status(500).json({
       success: false,
       message: 'Error al cerrar sesión'
