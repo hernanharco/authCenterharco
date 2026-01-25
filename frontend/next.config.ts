@@ -21,7 +21,7 @@ const nextConfig = {
         // Cuando el frontend pida /api/profiles/..., 
         // Next.js lo pedirá al backend de Express automáticamente.
         source: '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_EXPRESS_URL}/api/:path*`,
+        destination: `${process.env.NEXT_PUBLIC_EXPRESS_URL}/:path*`,
       },
     ]
   },
