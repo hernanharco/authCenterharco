@@ -16,59 +16,38 @@ const router = Router();
    1. AUTENTICACIÓN Y COOKIES
 ================================================= */
 
-// Reemplaza el endpoint /set-cookie
-
 router.post('/set-cookie', async (req: Request, res: Response) => {
-  const access_token = req.body?.access_token;
+  // 1. Extraemos los tokens (refresh_token ahora es opcional)
+  const { access_token, refresh_token } = req.body;
 
-  console.log("\n🔄 === SINCRONIZANDO TOKEN ===");
-  console.log("Access Token presente:", !!access_token);
+  console.log("\n🔄 === SINCRONIZANDO TOKEN EN RENDER ===");
 
   if (!access_token) {
-    return res.status(400).json({
-      success: false,
-      message: 'Access token requerido.'
-    });
-  }
-
-  // Validación del Access Token (debe ser JWT)
-  const isValidJWT = (token: string) => token.split('.').length === 3;
-
-  if (!isValidJWT(access_token)) {
-    console.error("❌ Access token NO es un JWT válido");
-    return res.status(400).json({
-      success: false,
-      message: 'Access token inválido (no es JWT)'
-    });
+    return res.status(400).json({ success: false, message: 'Access token requerido.' });
   }
 
   try {
-    // Validar el access token
-    const payload = await verifySupabaseToken(access_token);
+    // 2. Validar el token con Supabase
+    const user = await verifySupabaseToken(access_token);
+    console.log("✅ Token validado para:", user.email);
 
-    console.log("✅ Access token validado para:", payload.email);
-
-    // ✅ SOLUCIÓN: Solo establecemos el access token como cookie
-    // La cookie tendrá una duración de 1 hora (igual que el token)
+    // 3. CREAR LAS COOKIES (Aquí es donde ocurre la magia)
+    // Pasamos el objeto 'res' para que setAuthCookie pueda inyectar el header
     setAuthCookie(res, access_token, 'authToken');
 
-    console.log("✅ Cookie de sesión actualizada");
-    console.log("⏰ Próxima renovación automática en ~50 minutos");
-    console.log("=================================\n");
+    // Solo si el frontend nos mandó refresh_token, creamos esa cookie
+    if (refresh_token) {
+      setAuthCookie(res, refresh_token, 'refreshToken');
+    }
 
     return res.json({
       success: true,
-      message: 'Sesión sincronizada',
-      email: payload.email,
-      role: payload.role
+      message: 'Sesión sincronizada y cookies creadas',
+      user: { email: user.email }
     });
-  } catch (error: unknown) {
-    console.error("❌ Error al validar access token:", error);
-    return res.status(401).json({
-      success: false,
-      message: 'Access token inválido',
-      details: error
-    });
+  } catch (error: any) {
+    console.error("❌ Error en sincronización:", error.message);
+    return res.status(401).json({ success: false, message: 'Token inválido' });
   }
 });
 
@@ -94,7 +73,7 @@ router.get('/profiles', verifySession, hasRole('Admin'), async (req: any, res: R
     if (error) throw error;
     res.json({ success: true, profiles: profiles || [] });
   } catch (error: unknown) {
-    res.status(500).json({ success: false, message: 'Error en base de datos', error: error});
+    res.status(500).json({ success: false, message: 'Error en base de datos', error: error });
   }
 });
 
@@ -113,7 +92,7 @@ router.patch('/profiles/:id/role', verifySession, hasRole('Admin'), async (req: 
     await updateUserRole(id, role);
     res.json({ success: true, message: 'Rol actualizado en todo el sistema' });
   } catch (error: unknown) {
-    res.status(500).json({ success: false, message: error});
+    res.status(500).json({ success: false, message: error });
   }
 });
 
@@ -138,7 +117,7 @@ router.delete('/profiles/:id', verifySession, hasRole('Admin'), async (req: any,
 
     res.json({ success: true, message: 'Usuario eliminado permanentemente' });
   } catch (error: unknown) {
-    res.status(500).json({ success: false, message: error});
+    res.status(500).json({ success: false, message: error });
   }
 });
 

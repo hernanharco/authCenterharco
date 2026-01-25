@@ -87,15 +87,22 @@ export function setAuthCookie(
   token: string,
   name: "authToken" | "refreshToken"
 ) {
-  const isProd = process.env.NODE_ENV === "production";
+    // Detectamos el origen para saber si estamos en local o en Vercel
+    const origin = res.req.headers.origin || "";
+    const isLocal = origin.includes('localhost');
 
-  res.cookie(name, token, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? "none" : "lax",
-    path: "/",
-    maxAge: name === "refreshToken" ? 604800000 : 3600000
-  });
+    res.cookie(name, token, {
+        httpOnly: true,
+        // EN PRODUCCIÓN (Vercel -> Render) DEBE SER TRUE
+        secure: isLocal ? false : true, 
+        // EN PRODUCCIÓN (Vercel -> Render) DEBE SER 'none'
+        sameSite: isLocal ? "lax" : "none",
+        path: "/",
+        // Si es el authToken dura 1 hora, si es refreshToken dura 1 semana
+        maxAge: name === 'refreshToken' ? 7 * 24 * 60 * 60 * 1000 : 60 * 60 * 1000,
+    });
+    
+    console.log(`🍪 Cookie ${name} configurada (Secure: ${!isLocal}, SameSite: ${isLocal ? 'lax' : 'none'})`);
 }
 
 export function clearAuthCookies(res: Response) {

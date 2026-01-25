@@ -37,14 +37,12 @@ const AuthHandler = () => {
         // 2. Solo enviamos el access_token
         const response = await fetch(backendUrl, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include", // VITAL: Permite recibir cookies de otro dominio
           body: JSON.stringify({
             access_token: session.access_token,
-            // ⚠️ IMPORTANTE: No enviamos refresh_token porque Supabase usa uno interno
-            // En su lugar, el backend generará cookies de larga duración
+            // Enviamos el refresh por si el backend decide usarlo a futuro
+            refresh_token: session.refresh_token
           }),
         });
 
