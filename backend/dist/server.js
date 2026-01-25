@@ -17,7 +17,7 @@ const PORT = process.env.PORT || 4000;
  * Extraemos los orígenes permitidos desde el .env
  */
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
-    ? process.env.ALLOWED_ORIGINS.split(",") 
+    ? process.env.ALLOWED_ORIGINS.split(",").map(origin => origin.trim())
     : [];
 
 app.use((0, cors_1.default)({
