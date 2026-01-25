@@ -21,17 +21,19 @@ async function verifySupabaseToken(token) {
  * MEJORA ARQUITECTÓNICA: Manejo dinámico de Cookies para SaaS
  */
 function setAuthCookie(res, token, name) {
-    // Si la petición viene de un localhost, relajamos la seguridad para pruebas
-    const isLocalRequest = res.req.headers.origin?.includes('localhost');
+    // IMPORTANTE: En producción (Vercel/Render), siempre forzamos seguridad máxima
+    // Solo relajamos si estamos explícitamente en localhost
+    const origin = res.req.headers.origin || "";
+    const isLocal = origin.includes('localhost');
 
     res.cookie(name, token, {
         httpOnly: true,
-        // Si es local, secure debe ser false, si es producción real, true
-        secure: isLocalRequest ? false : true, 
-        // SameSite 'none' requiere HTTPS. Si es local usamos 'lax'
-        sameSite: isLocalRequest ? "lax" : "none",
+        // En Vercel/Render esto DEBE ser true. En local DEBE ser false.
+        secure: isLocal ? false : true, 
+        // 'none' es obligatorio para que Vercel (dominio A) acepte cookies de Render (dominio B)
+        sameSite: isLocal ? "lax" : "none",
         path: "/",
-        maxAge: name === "refreshToken" ? 604800000 : 3600000,
+        maxAge: name === 'refreshToken' ? 7 * 24 * 60 * 60 * 1000 : 60 * 60 * 1000,
     });
 }
 
