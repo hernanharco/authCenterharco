@@ -55,6 +55,7 @@ export const AuthRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
     try {
       const backendUrl = process.env.NEXT_PUBLIC_EXPRESS_URL || 'http://localhost:4000/api';
+      console.log('🌐 Backend URL:', backendUrl);
 
       console.log('🔄 Sincronizando nuevo token con backend...');
 
