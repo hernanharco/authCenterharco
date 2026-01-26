@@ -24,6 +24,8 @@ export default function DashboardPage() {
           credentials: "include",
         });
 
+        console.log("data", data);
+
         if (data && data.success && data.profiles) {
           // 1. Usuarios Totales
           const count = data.profiles.length;

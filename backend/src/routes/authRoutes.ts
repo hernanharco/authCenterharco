@@ -65,7 +65,7 @@ router.get('/profiles', verifySession, hasRole('Admin'), async (req: any, res: R
       return res.json({ success: true, total: count || 0 });
     }
 
-    const { data: profiles, error } = await supabase
+    const { data: profiles, error } = await supabaseAdmin
       .from('users')
       .select('id, email, role, updated_at')
       .order('updated_at', { ascending: false });

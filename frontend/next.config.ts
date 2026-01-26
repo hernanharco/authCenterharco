@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  
   images: {
     dangerouslyAllowSVG: true,
     remotePatterns: [
@@ -14,17 +15,18 @@ const nextConfig = {
       },
     ],
   },
-  // 🚨 ESTA ES LA PIEZA CLAVE PARA ELIMINAR EL 404
+  
+  // 🎯 PROXY INVERSO: Todas las peticiones a /api/v1/* se redirigen a Render
   async rewrites() {
+    console.log('🔧 Configurando rewrites del proxy...');
+    
     return [
       {
-        // Cuando el frontend pida /api/profiles/..., 
-        // Next.js lo pedirá al backend de Express automáticamente.
-        source: '/api/v1/:path*', 
-      destination: `https://authcenterharco-1.onrender.com/api/:path*`,
+        source: '/api/v1/:path*',
+        destination: 'https://authcenterharco-1.onrender.com/api/:path*',
       },
-    ]
+    ];
   },
 };
 
-export default nextConfig;
+module.exports = nextConfig;
