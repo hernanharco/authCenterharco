@@ -87,57 +87,48 @@ export function setAuthCookie(
   token: string,
   name: "authToken" | "refreshToken"
 ) {
-  // Detectamos el origen para saber si estamos en local o en producción
-  const origin = res.req.headers.origin || "";
-  const isLocal = origin.includes('localhost');
+  const isProd = process.env.NODE_ENV === "production";
 
-  // Detección estricta para producción Vercel + Render
-  const isVercelProduction = origin.includes('.vercel.app') || origin.includes('.render.com');
-
-  // Configuración estricta para producción cross-site
   const cookieConfig = {
     httpOnly: true,
-    // Siempre true en producción (Vercel -> Render), false solo en localhost
-    secure: isLocal ? false : true,
-    // Siempre 'none' en producción cross-site, 'lax' solo en localhost
-    sameSite: (isLocal ? "lax" : "none") as "lax" | "none",
+    secure: isProd,                         // 🔒 true en prod
+    sameSite: (isProd ? "none" : "lax") as "none" | "lax",
     path: "/",
-    // Si es el authToken dura 1 hora, si es refreshToken dura 1 semana
-    maxAge: name === 'refreshToken' ? 7 * 24 * 60 * 60 * 1000 : 60 * 60 * 1000,
+    maxAge:
+      name === "refreshToken"
+        ? 7 * 24 * 60 * 60 * 1000
+        : 60 * 60 * 1000,
   };
 
   res.cookie(name, token, cookieConfig);
 
-  console.log(`🍪 Cookie ${name} configurada:`);
-  console.log(`   - Origen: ${origin}`);
-  console.log(`   - Secure: ${cookieConfig.secure}`);
-  console.log(`   - SameSite: ${cookieConfig.sameSite}`);
-  console.log(`   - Es producción Vercel: ${isVercelProduction}`);
+  console.log(`🍪 Cookie ${name} configurada`, {
+    env: process.env.NODE_ENV,
+    secure: cookieConfig.secure,
+    sameSite: cookieConfig.sameSite,
+  });
 }
 
-export function clearAuthCookies(res: Response) {
-  // Detectamos el origen para saber si estamos en local o en producción
-  const origin = res.req.headers.origin || "";
-  const isLocal = origin.includes('localhost');
 
-  // Configuración consistente con setAuthCookie
+export function clearAuthCookies(res: Response) {
+  const isProd = process.env.NODE_ENV === "production";
+
   const options = {
     httpOnly: true,
     expires: new Date(0),
     path: "/",
-    sameSite: (isLocal ? "lax" : "none") as "lax" | "none",
-    secure: !isLocal // true en producción, false en localhost
+    sameSite: (isProd ? "none" : "lax") as "none" | "lax",
+    secure: isProd,
   };
 
   res.cookie("authToken", "", options);
   res.cookie("refreshToken", "", options);
 
-  console.log("🗑️ Cookies eliminadas con configuración:", {
-    origin,
-    secure: options.secure,
-    sameSite: options.sameSite
+  console.log("🗑️ Cookies eliminadas", {
+    env: process.env.NODE_ENV,
   });
 }
+
 
 /* =================================================
    REFRESCO DE SESIÓN (SILENT REFRESH LOGIC)
