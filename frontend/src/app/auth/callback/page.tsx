@@ -15,11 +15,11 @@ const AuthHandler = () => {
     // Si estamos en el navegador, usamos la ruta relativa para activar el Proxy de next.config
     // Esto funcionará tanto en localhost:3000 como en auth-centerharco.vercel.app
     if (typeof window !== "undefined") {
-      return "/api/v1/set-cookie";
+      return "/api/v1/";
     }
 
     // Fallback de seguridad (servidor)
-    return (process.env.NEXT_PUBLIC_EXPRESS_URL || "/api/v1") + "/set-cookie";
+    return (process.env.NEXT_PUBLIC_EXPRESS_URL || "/api/v1");
   };
 
   const baseUrl = getBackendUrl();

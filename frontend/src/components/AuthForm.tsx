@@ -107,33 +107,37 @@ const AuthForm: React.FC = () => {
   // LOGIN CON GOOGLE (OAuth)
   // ----------------------------------------------------
   const handleGoogleLogin = async (): Promise<void> => {
-    setError(null);
-    try {
-      let redirectToUrl = `${window.location.origin}/auth/callback`;
+  setError(null);
+  try {
+    // Forzamos la ruta exacta que debe estar en la Allow List de Supabase
+    const origin = window.location.origin; 
+    let redirectToUrl = `${origin}/auth/callback`;
 
-      if (trackingInfo) {
-        const jsonString = JSON.stringify(trackingInfo);
-        const encodedData = encodeURIComponent(jsonString);
-        redirectToUrl = `${redirectToUrl}?tracking=${encodedData}`;
-      }
-
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectToUrl,
-        },
-      });
-
-      if (error) throw error;
-    } catch (err) {
-      console.error(err);
-      let errorMessage = 'Error al iniciar sesión con Google.';
-      if (typeof err === 'object' && err !== null && 'message' in err) {
-        errorMessage = (err as SupabaseError).message;
-      }
-      setError(errorMessage);
+    // Si hay tracking, lo añadimos
+    if (trackingInfo) {
+      const jsonString = JSON.stringify(trackingInfo);
+      const encodedData = encodeURIComponent(jsonString);
+      redirectToUrl = `${redirectToUrl}?tracking=${encodedData}`;
     }
-  };
+
+    console.log("🔗 Redirigiendo a través de Supabase a:", redirectToUrl);
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: redirectToUrl,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+
+    if (error) throw error;
+  } catch (err) {
+    // ... error handling
+  }
+};
 
   return (
     <form
