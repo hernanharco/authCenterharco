@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { fetchApi } from '@/utils/api';
 import { useRouter } from 'next/navigation';
 import UserTable from '@/components/admin/users/user-table';
-import { User, UserRole } from '@/lib/types';
+import { User, UserRole, ProfileResponse, AllUsersResponse } from '@/lib/types';
 
 export default function PageUsers() {
   const [profileData, setProfileData] = useState<User | null>(null);
@@ -13,51 +13,51 @@ export default function PageUsers() {
   const [currentProject, setCurrentProject] = useState('');
   const router = useRouter();
 
-  // Función para cargar o refrescar datos
   const loadData = useCallback(async (showLoading = false) => {
     try {
       if (showLoading) setLoading(true);
 
-      const [myProfile, allUsersData] = await Promise.all([
-        fetchApi('/perfil'),
-        fetchApi('/admin/all-users')
+      // Sincronización Políglota: Perfil actual y lista global
+      const [myProfileRes, allUsersRes] = await Promise.all([
+        fetchApi('/perfil') as Promise<ProfileResponse>,
+        fetchApi('/profiles') as Promise<AllUsersResponse>
       ]);
 
-      console.log('myProfile:', myProfile);
-      console.log('allUsersData:', allUsersData);
+      console.log("myProfileRes", myProfileRes)
+      console.log("allUsersRes", allUsersRes)
 
-      if (myProfile?.user) {
+      // 1. Mapeo del Perfil del Usuario Logueado
+      if (myProfileRes?.success && myProfileRes.user) {
+        const u = myProfileRes.user;
         setProfileData({
-          id: myProfile.user.id,
-          email: myProfile.user.email,
-          name: myProfile.user.name || myProfile.user.email?.split('@')[0] || 'Usuario',
-          role: (myProfile.user.role as UserRole) || 'Viewer',
-          project_slug: myProfile.user.project_slug || 'Default',
-          avatar_url: myProfile.user.avatar_url || ''
+          id: u.sub || u.id, // Resolución del error de propiedad 'sub'
+          email: u.email,
+          name: u.name || u.email?.split('@')[0] || 'Usuario',
+          role: (u.role as UserRole) || 'Viewer',
+          project_slug: u.project_slug || 'Default',
+          avatar_url: u.avatar_url || ''
         });
       }
 
-      if (allUsersData?.data && Array.isArray(allUsersData.data)) {
-        const mappedUsers: User[] = allUsersData.data.map((u: { id: string; email: string; user_metadata?: { role?: string; full_name?: string; avatar_url?: string; project_slug?: string }; role?: string; name?: string; picture?: string; project_slug?: string }) => ({
+      // 2. Mapeo de la Lista de Usuarios desde Neon DB
+      if (allUsersRes?.success && Array.isArray(allUsersRes.profiles)) {
+        const mappedUsers: User[] = allUsersRes.profiles.map((u: any) => ({
           id: u.id,
           email: u.email,
-          // IMPORTANTE: Priorizamos el rol de user_metadata que actualizamos en el PATCH
-          role: (u.user_metadata?.role as UserRole) || (u.role as UserRole) || 'Viewer',
-          name: u.user_metadata?.full_name || u.name || u.email.split('@')[0],
-          avatar_url: u.user_metadata?.avatar_url || u.picture || '',
-          project_slug: u.project_slug || u.user_metadata?.project_slug || 'Default',
+          role: (u.role as UserRole) || 'Viewer', // Rol real persistido
+          name: u.name || u.email.split('@')[0],
+          avatar_url: u.avatar_url || '',
+          project_slug: u.project_slug || 'Default',
+          updated_at: u.updated_at
         }));
 
         setAllUsers(mappedUsers);
       }
     } catch (error: unknown) {
-      console.error('Error cargando PageUsers:', error);
-
-      // 1. Extraemos el mensaje de forma segura
+      console.error('❌ Error en el flujo de datos:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      // 2. Ahora sí podemos usar .includes() sobre un string garantizado
-      if (errorMessage.includes('Sesión')) {
+      if (errorMessage.includes('401') || errorMessage.includes('Sesión')) {
         router.push('/');
       }
     } finally {
@@ -67,17 +67,18 @@ export default function PageUsers() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const hostname = window.location.hostname;
-      setCurrentProject(hostname.split('.')[0] || 'Default');
+      setCurrentProject(window.location.hostname.split('.')[0] || 'Default');
     }
     loadData(true);
   }, [loadData]);
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen bg-background">
-      <div className="flex flex-col items-center gap-2">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm font-medium text-muted-foreground">Sincronizando con Supabase...</p>
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm font-medium animate-pulse text-muted-foreground">
+          Conectando con Infraestructura Políglota...
+        </p>
       </div>
     </div>
   );
@@ -86,22 +87,38 @@ export default function PageUsers() {
 
   return (
     <div className="min-h-screen p-4 sm:p-6 lg:p-8 text-foreground bg-background">
-      <main className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
-        <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <main className="max-w-7xl mx-auto space-y-8">
+        <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-6">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Tenant User Manager</h1>
-            <p className="text-muted-foreground mt-1">
-              Proyecto: <span className="font-semibold text-indigo-600 uppercase">{currentProject}</span>
+            <h1 className="text-3xl font-bold tracking-tight">Tenant Manager</h1>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Dominio: <span className="font-mono font-bold text-indigo-600 uppercase">{currentProject}</span>
             </p>
+          </div>
+          
+          <div className="flex items-center gap-4 bg-secondary/30 p-3 rounded-xl border border-border/50">
+            <div className="text-right">
+              <span className="text-[10px] font-black uppercase bg-primary text-primary-foreground px-2 py-0.5 rounded-full">
+                {profileData.role}
+              </span>
+              <p className="text-xs font-medium mt-1">{profileData.email}</p>
+            </div>
           </div>
         </header>
 
-        {/* Pasamos loadData como prop onUpdate */}
-        <UserTable
-          initialUsers={allUsers}
-          onUpdate={() => loadData(false)}
-        />
+        <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <UserTable
+            initialUsers={allUsers}
+            onUpdate={() => loadData(false)}
+          />
+        </section>
       </main>
+
+      <style jsx global>{`
+        :root {
+          --primary: #6366f1;
+        }
+      `}</style>
     </div>
   );
 }

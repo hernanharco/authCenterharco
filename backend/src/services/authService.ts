@@ -1,206 +1,96 @@
-import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
 import { Response } from "express";
+import { ENV_CONFIG } from "../config/env.config";
 import { AuthenticatedUser } from "../types/authTypes";
 import { UserRole } from "../types/permissionTypes";
 
-// * =================================================
-//    CLIENTES SUPABASE (SDK CONFIGURATION)
-// ================================================= *//
+export const supabase = createClient(ENV_CONFIG.SUPABASE.URL, ENV_CONFIG.SUPABASE.ANON_KEY);
+export const supabaseAdmin = createClient(ENV_CONFIG.SUPABASE.URL, ENV_CONFIG.SUPABASE.SERVICE_KEY);
 
-const supabaseUrl = process.env.SUPABASE_URL as string;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY as string;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-
-/* =================================================
-   VALIDACIÓN DE TOKENS (STATELESS VERIFICATION)
-================================================= */
-
-/**
- * ✅ VERSIÓN CORREGIDA
- * Valida un JWT de Supabase creando un cliente temporal con el token.
- * Esto resuelve el error "Auth session missing!"
- */
 export const verifySupabaseToken = async (token: string): Promise<AuthenticatedUser> => {
-  console.log("🛠️ URL de Supabase en uso:", process.env.SUPABASE_URL);
-
   try {
-    // MÉTODO CORRECTO: Crear un cliente temporal con el token específico
-    const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      }
+    const tempClient = createClient(ENV_CONFIG.SUPABASE.URL, ENV_CONFIG.SUPABASE.ANON_KEY, {
+      global: { headers: { Authorization: `Bearer ${token}` } }
     });
 
-    // Ahora getUser() usará el token del header
     const { data: { user }, error } = await tempClient.auth.getUser();
+    if (error || !user) throw new Error("Token inválido");
 
-    if (error) {
-      console.error("❌ Error de Validación de Supabase:", {
-        message: error.message,
-        status: error.status
-      });
-      throw error;
-    }
-
-    if (!user) {
-      throw new Error("Usuario no encontrado en el token");
-    }
-
-    // Obtener el rol desde la tabla users (más confiable que app_metadata)
-    const { data: profile, error: profileError } = await supabase
+    // 🐘 PERSISTENCIA POLÍGLOTA: 
+    // Usamos supabaseAdmin para saltar RLS y asegurar la lectura en Neon
+    const { data: profile, error: dbError } = await supabaseAdmin
       .from('users')
       .select('role')
       .eq('id', user.id)
       .single();
 
-    if (profileError) {
-      console.warn("⚠️ No se pudo obtener perfil desde DB, usando metadata");
-    }
-
-    const userRole = profile?.role || (user.app_metadata?.role as UserRole) || 'Viewer';
-
-    console.log("✅ Token validado correctamente para:", user.email, "| Rol:", userRole);
+    // Lógica de Prioridad: Neon > Supabase Metadata > Default
+    const finalRole = profile?.role || (user.app_metadata?.role as UserRole) || 'Viewer';
 
     return {
       sub: user.id,
       email: user.email!,
-      role: userRole
+      role: finalRole as UserRole
     };
-  } catch (error: unknown) {
-    console.error("🔴 Fallo completo en verifySupabaseToken:", error);
+  } catch (error: any) {
+    console.error("🔴 Error en verifySupabaseToken:", error.message);
     throw error;
   }
 };
 
-/* =================================================
-   GESTIÓN DE COOKIES (HTTP-ONLY SECURITY)
-================================================= */
-
-export function setAuthCookie(
-  res: Response,
-  token: string,
-  name: "authToken" | "refreshToken"
-) {
-  const isProd = process.env.NODE_ENV === "production";
-
-  const cookieConfig = {
+export function setAuthCookie(res: Response, token: string, name: "authToken" | "refreshToken") {
+  res.cookie(name, token, {
     httpOnly: true,
-    secure: isProd,                         // 🔒 true en prod
-    sameSite: (isProd ? "none" : "lax") as "none" | "lax",
+    secure: ENV_CONFIG.COOKIES.SECURE,
+    sameSite: ENV_CONFIG.COOKIES.SAME_SITE,
     path: "/",
-    maxAge:
-      name === "refreshToken"
-        ? 7 * 24 * 60 * 60 * 1000
-        : 60 * 60 * 1000,
-  };
-
-  res.cookie(name, token, cookieConfig);
-
-  console.log(`🍪 Cookie ${name} configurada`, {
-    env: process.env.NODE_ENV,
-    secure: cookieConfig.secure,
-    sameSite: cookieConfig.sameSite,
+    maxAge: name === "refreshToken" ? 7 * 24 * 60 * 60 * 1000 : 60 * 60 * 1000,
   });
 }
-
 
 export function clearAuthCookies(res: Response) {
-  const isProd = process.env.NODE_ENV === "production";
-
   const options = {
     httpOnly: true,
-    expires: new Date(0),
+    secure: ENV_CONFIG.COOKIES.SECURE,
+    sameSite: ENV_CONFIG.COOKIES.SAME_SITE,
     path: "/",
-    sameSite: (isProd ? "none" : "lax") as "none" | "lax",
-    secure: isProd,
+    expires: new Date(0),
   };
-
   res.cookie("authToken", "", options);
   res.cookie("refreshToken", "", options);
+}
 
-  console.log("🗑️ Cookies eliminadas", {
-    env: process.env.NODE_ENV,
+export async function updateUserRole(userId: string, newRole: UserRole) {
+  // Sincronización Dual: Neon + Supabase Auth
+  await supabase.from("users").update({ role: newRole }).eq("id", userId);
+  await supabaseAdmin.auth.admin.updateUserById(userId, {
+    app_metadata: { role: newRole }
   });
 }
 
-
-/* =================================================
-   REFRESCO DE SESIÓN (SILENT REFRESH LOGIC)
-================================================= */
-
-export async function refreshAuthToken(refreshToken: string) {
-  try {
-    const { data, error } = await supabase.auth.refreshSession({
-      refresh_token: refreshToken
-    });
-
-    if (error || !data.session) {
-      console.error("❌ Error en refresh:", error?.message);
-      throw new Error("No se pudo renovar la sesión");
-    }
-
-    console.log("🔄 Sesión refrescada exitosamente");
-    return data.session;
-  } catch (error: unknown) {
-    console.error("🔴 Fallo en refreshAuthToken:", error);
-    throw error;
-  }
-}
-
-/* =================================================
-   ADMINISTRACIÓN (USER MANAGEMENT)
-================================================= */
-
+/**
+ * Obtiene todos los usuarios directamente de Supabase Auth
+ * (Solo para uso administrativo)
+ */
 export const getAllUsersFromAuth = async () => {
   const { data, error } = await supabaseAdmin.auth.admin.listUsers();
-
   if (error) {
+    console.error("❌ Error al listar usuarios de Auth:", error.message);
     throw error;
   }
-
   return data.users;
 };
 
 /**
- * ACTUALIZACIÓN DE ROLES (SYNC AUTH + PUBLIC TABLE)
+ * Renueva el token de acceso usando el refresh token
  */
-export async function updateUserRole(userId: string, newRole: UserRole) {
-  try {
-    // 1. Actualizar en la tabla users
-    const { error: dbError } = await supabase
-      .from("users")
-      .update({
-        role: newRole,
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", userId);
+export async function refreshAuthToken(refreshToken: string) {
+  const { data, error } = await supabase.auth.refreshSession({
+    refresh_token: refreshToken
+  });
 
-    if (dbError) throw new Error(`Error en DB: ${dbError.message}`);
-
-    // 2. Actualizar en Auth metadata
-    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
-      userId,
-      {
-        app_metadata: { role: newRole },
-        user_metadata: { role: newRole }
-      }
-    );
-
-    if (authError) {
-      console.warn("⚠️ Falló Auth, pero DB actualizada");
-      throw new Error(`Error en Auth: ${authError.message}`);
-    }
-
-    console.log("✅ Rol actualizado correctamente:", newRole);
-    return { success: true };
-  } catch (error: unknown) {
-    console.error("❌ Fallo en actualización de rol:", error);
-    throw error;
+  if (error || !data.session) {
+    throw new Error("No se pudo renovar la sesión");
   }
+  return data.session;
 }

@@ -1,33 +1,25 @@
 import { CorsOptions } from 'cors';
-
-// 1. Obtenemos la cadena de Render y la convertimos en Array
-// 2. Usamos trim() para evitar errores de espacios como el que vimos antes
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
-  .split(",")
-  .map(o => o.trim())
-  .filter(Boolean);
+import { ENV_CONFIG } from './env.config';
 
 export const corsOptions: CorsOptions = {
   origin: (origin, callback) => {
-    // Permitir peticiones sin origen (como servidores o herramientas internas)
+    // Permitir si no hay origen (Postman)
     if (!origin) return callback(null, true);
 
-    // Verificación dinámica
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
+    const isAllowed = ENV_CONFIG.CORS.ALLOWED_ORIGINS.includes(origin);
+    const isLocal = origin.includes('localhost') || origin.includes('127.0.0.1');
 
-    // Comodín para desarrollo local si no quieres llenar el .env de localhost
-    if (process.env.NODE_ENV === 'development' && 
-       (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
-      return callback(null, true);
+    // Si es producción, solo permitimos la lista oficial
+    // Si es desarrollo, permitimos local + lista oficial
+    if (isAllowed || (!ENV_CONFIG.IS_PROD && isLocal)) {
+      callback(null, true);
+    } else {
+      console.warn(`🚫 CORS bloqueado para: ${origin}`);
+      callback(new Error('No permitido por CORS'));
     }
-
-    console.warn(`❌ Bloqueado por CORS: ${origin}`);
-    callback(new Error('No permitido por CORS'));
   },
-  credentials: true, // INDISPENSABLE para tus cookies de sesión
-  methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+  credentials: true, // Vital para recibir cookies de Vercel
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Requested-With", "Origin"],
   exposedHeaders: ["Set-Cookie"]
 };

@@ -1,68 +1,35 @@
-import "dotenv/config";
-import express, { Request, Response, NextFunction } from "express";
-import cors from "cors";
-import cookieParser from "cookie-parser";
-import authRoutes from "./routes/authRoutes";
-import { corsOptions } from "./config/corsConfig";
-import { initEnvValidation } from "./utils/validateEnv"; // ⬅️ NUEVO
-
-// ⚡ VALIDAR VARIABLES DE ENTORNO ANTES DE INICIAR
-initEnvValidation();
+import express from 'express';
+import cors from 'cors';
+import cookieParser from 'cookie-parser';
+import { corsOptions } from './config/corsConfig';
+import { ENV_CONFIG } from './config/env.config';
+import authRoutes from './routes/authRoutes';
 
 const app = express();
-const PORT = process.env.PORT || 4000;
 
-// 1. CONFIGURACIÓN DE CORS DINÁMICA
+// 1. Middlewares Globales
+// El orden es vital: CORS -> Parsers -> Rutas
 app.use(cors(corsOptions));
-
-// 2. MIDDLEWARES GENERALES
-app.use(express.json());
 app.use(cookieParser());
+app.use(express.json()); // 👈 Resuelve el error 500 de req.body vacío
+app.use(express.urlencoded({ extended: true }));
 
-// 3. REGISTRO DE RUTAS
-app.use("/api", authRoutes);
-
-// Ruta base de salud
-app.get("/", (req: Request, res: Response) => {
-  res.send("🚀 API SaaS Online (Linux Server)");
+// 2. Logger de Depuración (Opcional, muy útil para ver el tráfico del proxy)
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - Origin: ${req.headers.origin}`);
+  next();
 });
 
-// 4. MANEJO DE RUTAS NO ENCONTRADAS
-app.use((req: Request, res: Response) => {
-  res.status(404).json({
-    message: `La ruta ${req.originalUrl} no existe.`
-  });
+// 3. Rutas
+app.use('/api', authRoutes);
+
+// 4. Manejo de Errores Global
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error("🔥 Error no manejado:", err.stack);
+  res.status(500).json({ success: false, message: "Error interno en el servidor Express" });
 });
 
-// 5. MANEJO DE ERRORES GLOBAL
-// Definimos una interfaz para errores esperados
-interface AppError extends Error {
-  status?: number;
-  details?: unknown;
-}
-
-app.use((err: AppError, req: Request, res: Response, next: NextFunction) => {
-  const status = err.status || 500;
-  const message = err.message || "Error interno del servidor";
-
-  console.error(`\x1b[31m[ERROR] ${req.method} ${req.url}\x1b[0m`);
-  console.error(err.stack);
-
-  res.status(status).json({
-    success: false,
-    message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack, details: err })
-  });
-});
-
-// 6. INICIO DEL SERVIDOR
-app.listen(PORT, () => {
-  console.log(`✅ Servidor SaaS corriendo en: http://localhost:${PORT}`);
-  console.log(`🏠 Orígenes permitidos: ${process.env.FRONTEND_URL} y ${process.env.AUTH_FRONTEND_URL}`);
-}).on('error', (err: NodeJS.ErrnoException) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`❌ El puerto ${PORT} está ocupado. Usa 'fuser -k ${PORT}/tcp'`);
-  } else {
-    console.error("❌ Error al arrancar:", err.message);
-  }
+app.listen(ENV_CONFIG.PORT, () => {
+  console.log(`🚀 Servidor Políglota corriendo en http://localhost:${ENV_CONFIG.PORT}`);
+  console.log(`🌍 Entorno: ${ENV_CONFIG.IS_PROD ? 'PRODUCCIÓN' : 'DESARROLLO'}`);
 });

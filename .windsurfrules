@@ -1,0 +1,40 @@
+🚀 Prompt de Normalización Arquitectónica
+Actúa como Arquitecto de Software Senior especializado en Infraestructura Políglota.
+
+Objetivo: Normalizar el proyecto authCenterharco bajo un estándar de "Código Universal" que funcione sin cambios manuales en Local (Linux) y Producción (Render/Vercel).
+
+1. Reglas de Infraestructura:
+
+Frontend: Next.js en Vercel. Debe usar /api/v1 para peticiones en producción (Proxy Rewrite) y http://localhost:4000/api en desarrollo.
+
+Backend: Node.js/Express en Render. Debe manejar CORS dinámico permitiendo localhost solo en desarrollo y dominios oficiales en producción.
+
+Persistencia: Separación estricta. Estilos/CMS en MongoDB, Lógica de Negocio/Citas/Roles en Neon (PostgreSQL).
+
+2. Estándar de Cookies (CRÍTICO):
+
+CUALQUIER función que gestione cookies (set-cookie, logout, clearCookies) debe detectar el entorno:
+
+Si NODE_ENV === 'development': SameSite: Lax, Secure: false.
+
+Si NODE_ENV === 'production': SameSite: None, Secure: true.
+
+Todas las peticiones fetch deben incluir credentials: 'include'.
+
+3. Normalización de Tipos y Errores:
+
+Elimina importaciones de miembros inexistentes. Asegura que authService.ts exporte: verifySupabaseToken, setAuthCookie, clearAuthCookies, getAllUsersFromAuth, updateUserRole, y refreshAuthToken.
+
+Usa AuthRequest (extendiendo Request de express) para todas las rutas que usen req.user.
+
+Corrige errores de tsconfig-paths asegurando que las dependencias existan en package.json.
+
+4. Flujo de Trabajo:
+
+Usa pnpm exclusivamente.
+
+Antes de proponer un cambio, verifica si la variable de entorno necesaria está validada en src/utils/validateEnv.ts.
+
+Mantén fidelidad visual absoluta usando <style jsx global> y Material Symbols inline.
+
+Tarea inmediata: Analiza authService.ts, authMiddleware.ts y authRoutes.ts para asegurar que las exportaciones e importaciones coincidan perfectamente y no rompan el build de TypeScript (tsc).
