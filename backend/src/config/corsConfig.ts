@@ -1,54 +1,33 @@
 import { CorsOptions } from 'cors';
 
-/**
- * Orígenes permitidos para desarrollo y producción
- * Procesados con .split(",").map() para eliminar espacios invisibles
- */
-const rawOrigins = [
-  process.env.FRONTEND_URL,          // AuthCenter (localhost:3000)
-  process.env.AUTH_FRONTEND_URL,     // AuthCenter alternativo
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-
-  // Tapicería - Desarrollo
-  'http://localhost:9002',
-  'http://127.0.0.1:9002',
-
-  // Otras apps que uses
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-
-  // Producción (cuando despliegues)
-  process.env.TAPICERIA_PRODUCTION_URL, // Añadir en .env
-].filter(Boolean);
-
-// Procesamos los orígenes para eliminar espacios invisibles
-const allowedOrigins = rawOrigins.flatMap(origin =>
-  origin ? origin.split(",").map(o => o.trim()).filter(Boolean) : []
-);
+// 1. Obtenemos la cadena de Render y la convertimos en Array
+// 2. Usamos trim() para evitar errores de espacios como el que vimos antes
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map(o => o.trim())
+  .filter(Boolean);
 
 export const corsOptions: CorsOptions = {
   origin: (origin, callback) => {
-    // Permitir si no hay origen (Postman, requests del servidor)
-    if (!origin) {
-      return callback(null, true);
-    }
+    // Permitir peticiones sin origen (como servidores o herramientas internas)
+    if (!origin) return callback(null, true);
 
-    // Verificar si está en la lista de permitidos
+    // Verificación dinámica
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
 
-    // En desarrollo, permitir cualquier localhost
-    if (process.env.NODE_ENV === 'development' && origin.includes('localhost')) {
+    // Comodín para desarrollo local si no quieres llenar el .env de localhost
+    if (process.env.NODE_ENV === 'development' && 
+       (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
       return callback(null, true);
     }
 
-    console.warn(`❌ Origen bloqueado por CORS: ${origin}`);
+    console.warn(`❌ Bloqueado por CORS: ${origin}`);
     callback(new Error('No permitido por CORS'));
   },
-  credentials: true, // ⬅️ CRÍTICO para cookies cross-origin
+  credentials: true, // INDISPENSABLE para tus cookies de sesión
   methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-  exposedHeaders: ["Set-Cookie"] // Permitir que el navegador vea las cookies
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+  exposedHeaders: ["Set-Cookie"]
 };
