@@ -27,12 +27,10 @@ interface UserTableProps {
   onUpdate?: () => void;
 }
 
-// 1. Agregamos 'Owner' a las opciones de la tabla
 const roleOptions: UserRole[] = ['Owner', 'SuperAdmin', 'Admin', 'Editor', 'Viewer'];
 
-// 2. Agregamos 'Owner' al Record para solucionar el error 2741
 const roleBadgeVariants: Record<UserRole, string> = {
-  Owner: 'bg-amber-600 hover:bg-amber-700 text-white border-transparent', // Dorado/Ámbar para el dueño
+  Owner: 'bg-amber-600 hover:bg-amber-700 text-white border-transparent',
   SuperAdmin: 'bg-indigo-600 hover:bg-indigo-700 text-white border-transparent',
   Admin: 'bg-destructive text-destructive-foreground hover:bg-destructive/80',
   Editor: 'bg-primary text-primary-foreground hover:bg-primary/80',
@@ -63,7 +61,8 @@ export default function UserTable({ initialUsers, onUpdate }: UserTableProps) {
       return;
     }
 
-    if (!confirm(`¿Eliminar a ${user.name}?`)) return;
+    const userName = user.name || user.email; // Fallback para TS
+    if (!confirm(`¿Eliminar a ${userName}?`)) return;
 
     setIsUpdating(user.id);
     try {
@@ -101,13 +100,16 @@ export default function UserTable({ initialUsers, onUpdate }: UserTableProps) {
   };
 
   const filteredAndSortedUsers = React.useMemo(() => {
-    const filtered = users.filter(user =>
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filtered = users.filter(user => {
+      const name = (user.name || '').toLowerCase();
+      const email = (user.email || '').toLowerCase();
+      const search = searchTerm.toLowerCase();
+      return name.includes(search) || email.includes(search);
+    });
+
     filtered.sort((a, b) => {
-      const valA = (a[sortConfig.key] as string || '').toLowerCase();
-      const valB = (b[sortConfig.key] as string || '').toLowerCase();
+      const valA = (a[sortConfig.key] || '').toString().toLowerCase();
+      const valB = (b[sortConfig.key] || '').toString().toLowerCase();
       return sortConfig.order === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
     });
     return filtered;
@@ -143,63 +145,72 @@ export default function UserTable({ initialUsers, onUpdate }: UserTableProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredAndSortedUsers.map((user) => (
-                <TableRow key={user.id} className={user.role === 'SuperAdmin' ? "bg-indigo-50/30" : ""}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <Avatar className={cn("h-9 w-9 border-2", user.role === 'SuperAdmin' ? "border-indigo-200" : "border-transparent")}>
-                        <AvatarImage src={user.avatar_url?.replace("http://", "https://")} />
-                        <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
-                      </Avatar>
-                      <div className="flex flex-col">
-                        <span className="font-medium text-sm flex items-center gap-1">
-                          {user.name}
-                          {user.role === 'SuperAdmin' && <ShieldCheck className="w-3 h-3 text-indigo-600" />}
-                        </span>
-                        <span className="text-xs text-muted-foreground">{user.email}</span>
+              {filteredAndSortedUsers.map((user) => {
+                // Saneamiento de la URL del Avatar para evitar bloqueos Mixed Content / Next Config
+                const avatarSrc = user.avatar_url?.startsWith('http://google') 
+                  ? user.avatar_url.replace('http://', 'https://') 
+                  : user.avatar_url;
+
+                return (
+                  <TableRow key={user.id} className={user.role === 'SuperAdmin' ? "bg-indigo-50/30" : ""}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <Avatar className={cn("h-9 w-9 border-2", user.role === 'SuperAdmin' ? "border-indigo-200" : "border-transparent")}>
+                          <AvatarImage src={avatarSrc} alt={user.name || 'User'} />
+                          <AvatarFallback>{(user.name || user.email).charAt(0).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col">
+                          <span className="font-medium text-sm flex items-center gap-1">
+                            {user.name || 'Sin Nombre'}
+                            {user.role === 'SuperAdmin' && <ShieldCheck className="w-3 h-3 text-indigo-600" />}
+                          </span>
+                          <span className="text-xs text-muted-foreground">{user.email}</span>
+                        </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-[10px] uppercase font-semibold">{user.project_slug}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={cn("text-[10px] font-bold shadow-none", roleBadgeVariants[user.role])}>
-                      {user.role}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" disabled={isUpdating === user.id}>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuRadioGroup
-                          value={user.role}
-                          onValueChange={(v) => handleRoleChange(user.id, v as UserRole)}
-                        >
-                          {roleOptions.map((role) => (
-                            <DropdownMenuRadioItem key={role} value={role} className="text-xs">
-                              Cambiar a {role}
-                            </DropdownMenuRadioItem>
-                          ))}
-                        </DropdownMenuRadioGroup>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-xs text-destructive focus:text-destructive cursor-pointer"
-                          disabled={user.role === 'SuperAdmin'}
-                          onClick={() => handleDeleteUser(user)}
-                        >
-                          <Trash2 className="mr-2 h-3.5 w-3.5" />
-                          Eliminar Usuario
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-[10px] uppercase font-semibold">
+                        {user.project_slug || 'Default'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={cn("text-[10px] font-bold shadow-none", roleBadgeVariants[user.role])}>
+                        {user.role}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" disabled={isUpdating === user.id}>
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuRadioGroup
+                            value={user.role}
+                            onValueChange={(v) => handleRoleChange(user.id, v as UserRole)}
+                          >
+                            {roleOptions.map((role) => (
+                              <DropdownMenuRadioItem key={role} value={role} className="text-xs">
+                                Cambiar a {role}
+                              </DropdownMenuRadioItem>
+                            ))}
+                          </DropdownMenuRadioGroup>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-xs text-destructive focus:text-destructive cursor-pointer"
+                            disabled={user.role === 'SuperAdmin'}
+                            onClick={() => handleDeleteUser(user)}
+                          >
+                            <Trash2 className="mr-2 h-3.5 w-3.5" />
+                            Eliminar Usuario
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>

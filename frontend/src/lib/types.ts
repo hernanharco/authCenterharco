@@ -26,5 +26,5 @@ export interface ProfileResponse {
 
 export interface AllUsersResponse {
   success: boolean;
-  profiles: any[]; // Datos provenientes de Neon DB
+  profiles: User[]; // Datos provenientes de Neon DB
 }

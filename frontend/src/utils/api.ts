@@ -46,8 +46,8 @@ export async function fetchApi<T = ApiResponse>(
         }
 
         return await response.json() as T;
-    } catch (error: any) {
-        console.error(`🔴 API Error en ${cleanEndpoint}:`, error.message);
+    } catch (error: unknown) {
+        console.error(`🔴 API Error en ${cleanEndpoint}:`, error);
         throw error;
     }
 }

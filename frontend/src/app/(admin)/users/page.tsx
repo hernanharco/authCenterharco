@@ -41,7 +41,7 @@ export default function PageUsers() {
 
       // 2. Mapeo de la Lista de Usuarios desde Neon DB
       if (allUsersRes?.success && Array.isArray(allUsersRes.profiles)) {
-        const mappedUsers: User[] = allUsersRes.profiles.map((u: any) => ({
+        const mappedUsers: User[] = allUsersRes.profiles.map((u: User) => ({
           id: u.id,
           email: u.email,
           role: (u.role as UserRole) || 'Viewer', // Rol real persistido
