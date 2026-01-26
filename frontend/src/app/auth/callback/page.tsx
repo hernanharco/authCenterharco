@@ -10,6 +10,20 @@ const AuthHandler = () => {
   const [status, setStatus] = useState<string>("Iniciando procesamiento...");
   const [error, setError] = useState<boolean>(false);
 
+  // ✅ Lógica auto-gestionada en AuthHandler.tsx
+  const getBackendUrl = () => {
+    // Si estamos en el navegador, usamos la ruta relativa para activar el Proxy de next.config
+    // Esto funcionará tanto en localhost:3000 como en auth-centerharco.vercel.app
+    if (typeof window !== "undefined") {
+      return "/api/v1/set-cookie";
+    }
+
+    // Fallback de seguridad (servidor)
+    return (process.env.NEXT_PUBLIC_EXPRESS_URL || "/api/v1") + "/set-cookie";
+  };
+
+  const baseUrl = getBackendUrl();
+
   useEffect(() => {
     const handleAuth = async () => {
       try {
@@ -29,7 +43,7 @@ const AuthHandler = () => {
         // ✅ SOLUCIÓN: NO ENVIAR REFRESH TOKEN AL BACKEND
         // El backend solo necesita el access_token para crear la sesión inicial
         // El refresh lo manejará el propio SDK de Supabase del lado del cliente
-        const baseUrl = (process.env.NEXT_PUBLIC_EXPRESS_URL || "http://localhost:4000/api").replace(/\/$/, "");
+        //const baseUrl = (process.env.NEXT_PUBLIC_EXPRESS_URL || "/api/v1").replace(/\/$/, "");
         const backendUrl = `${baseUrl}/set-cookie`;
 
         console.log("🚀 Enviando token a:", backendUrl);
